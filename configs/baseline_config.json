@@ -1,0 +1,28 @@
+{
+    "exp":{
+        "name": "baseline_model"
+    },
+    "data":{
+        "root_path": "/home/trinhnh1/Documents/train_data/kaggle/human-protein/input",
+        "num_classes": 28,
+        "image_rows": 512,
+        "image_cols": 512,
+        "n_channels": 1,
+        "row_scale_factor": 4,
+        "col_scale_factor": 4,
+        "kfold_cv":{
+            "n_splits": 3,
+            "n_repeats": 1,
+            "random_state": false
+        }
+    },
+    "model":{
+        "learning_rate": 0.001,
+        "optimizer": "adam"
+    },
+    "trainer":{
+        "epochs": 30,
+        "batch_size": 128,
+        "shuffle": false
+    }
+}

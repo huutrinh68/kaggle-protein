@@ -6,9 +6,11 @@ class ImprovedModel(BaseLineModel):
     
     def learn(self):
         self.history = TrackHistory()
-        return self.model.fit_generator(generator=self.training_generator,
-                    validation_data=self.validation_generator,
-                    epochs=self.params.n_epochs, 
-                    use_multiprocessing=True,
-                    workers=8,
-                    callbacks = [self.history])
+        return self.model.fit_generator(
+            generator=self.training_generator,
+            validation_data=self.validation_generator,
+            epochs=self.params.n_epochs, 
+            use_multiprocessing=True,
+            workers=8,
+            callbacks = [self.history]
+        )

@@ -1,14 +1,13 @@
 from skimage.transform import resize
-from model_parameter import ModelParameter
 
 class ImagePreprocessor:
+    def __init__(self, config):
+        self.config = config
+        self.basepath = config.data.root_path
+        self.scaled_row_dim = int(config.data.image_rows/config.data.row_scale_factor)
+        self.scaled_col_dim = int(config.data.image_cols/config.data.col_scale_factor)
+        self.n_channels = config.data.n_channels
     
-    def __init__(self, modelparameter):
-        self.parameter = modelparameter
-        self.basepath = self.parameter.basepath
-        self.scaled_row_dim = self.parameter.scaled_row_dim
-        self.scaled_col_dim = self.parameter.scaled_col_dim
-        self.n_channels = self.parameter.n_channels
     
     def preprocess(self, image):
         image = self.resize(image)
@@ -25,13 +24,16 @@ class ImagePreprocessor:
         return image
     
     def normalize(self, image):
-        image /= 255 
+        image /= 255.0 
         return image
     
     def load_image(self, image_id):
-        image = np.zeros(shape=(512,512,4))
+        image_rows = self.config.data.image_rows
+        image_cols = self.config.data.image_cols
+        image_channels = 4
+        image = np.zeros(shape=(image_rows, image_cols, image_channels))
         image[:,:,0] = imread(self.basepath + image_id + "_green" + ".png")
         image[:,:,1] = imread(self.basepath + image_id + "_blue" + ".png")
         image[:,:,2] = imread(self.basepath + image_id + "_red" + ".png")
         image[:,:,3] = imread(self.basepath + image_id + "_yellow" + ".png")
-        return image[:,:,0:self.parameter.n_channels]
+        return image[:,:,0:self.config.data.n_channels]

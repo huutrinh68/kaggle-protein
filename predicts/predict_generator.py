@@ -6,7 +6,7 @@ class PredictGenerator:
         self.identifiers = predict_Ids
     
     def predict(self, model):
-        y = np.empty(shape=(len(self.identifiers), self.preprocessor.parameter.num_classes))
+        y = np.empty(shape=(len(self.identifiers), self.preprocessor.config.data.num_classes))
         for n in range(len(self.identifiers)):
             image = self.preprocessor.load_image(self.identifiers[n])
             image = self.preprocessor.preprocess(image)
