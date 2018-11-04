@@ -10,6 +10,7 @@ import numpy as np
 import os
 from sklearn.model_selection import RepeatedKFold
 import pandas as pd
+from kenerl import KernelSettings
 
 def main():
     # capture the config path from the run arguments
@@ -61,8 +62,22 @@ def main():
     validation_generator = BaselineModelDataLoader(config, partition["validation"], labels, preprocessor)
     predict_generator = PredictGenerator(partition['validation'], preprocessor, train_path)
 
-    
-
+    # run computation and store results as csv
+    if kernelsettings.fit_improved_baseline == True:
+        model = ImprovedModel(parameter)
+        model.build_model()
+        model.compile_model()
+        model.set_generators(training_generator, validation_generator)
+        history = model.learn()
+        proba_predictions = model.predict(validation_generator)
+        #model.save("improved_model.h5")
+        improved_proba_predictions = pd.DataFrame(proba_predictions, columns=wishlist)
+        improved_proba_predictions.to_csv("improved_predictions.csv")
+    # if you already have done a baseline fit once, 
+    # you can load predictions as csv and further fitting is not neccessary:
+    # else:
+    #     baseline_proba_predictions = pd.read_csv("../input/protein-atlas-eab-predictions/baseline_predictions.csv", index_col=0)
+        
     # print('Create the model.')
     # model = SimpleMnistModel(config)
 
