@@ -1,6 +1,6 @@
 class BaseLineModel:
     
-    def __init__(self, modelparameter):
+    def __init__(self, config):
         self.params = modelparameter
         self.num_classes = self.params.num_classes
         self.img_rows = self.params.scaled_row_dim

@@ -1,5 +1,5 @@
 from data_loader.baseline_data_loader import BaselineModelDataLoader
-from models.simple_mnist_model import SimpleMnistModel
+from models.baseline_model import BaselineModel
 from trainers.simple_mnist_trainer import SimpleMnistModelTrainer
 from preprocessing.preprocessing import ImagePreprocessor
 from predicts.predict_generator import PredictGenerator
