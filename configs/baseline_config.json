@@ -1,6 +1,7 @@
 {
     "exp":{
-        "name": "baseline_model"
+        "name": "baseline_model",
+        "workspace": "huutrinh68"
     },
     "data":{
         "root_path": "/home/trinhnh1/Documents/train_data/kaggle/human-protein/input",
@@ -24,5 +25,6 @@
         "epochs": 30,
         "batch_size": 128,
         "shuffle": false
-    }
+    },
+    "comet_api_key": "6LYdLbRq3fQGE6y1SzTvFO2mU"
 }
