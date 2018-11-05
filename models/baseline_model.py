@@ -1,11 +1,11 @@
 class BaseLineModel:
     
     def __init__(self, config):
-        self.params = modelparameter
-        self.num_classes = self.params.num_classes
-        self.img_rows = self.params.scaled_row_dim
-        self.img_cols = self.params.scaled_col_dim
-        self.n_channels = self.params.n_channels
+        self.config = config
+        self.num_classes = self.config.data.num_classes
+        self.img_rows = int(self.config.data.img_rows / self.config.data.row_scale_factor)
+        self.img_cols = int(self.config.data.img_cols / self.config.data.col_scale_factor)
+        self.n_channels = self.config.data.n_channels
         self.input_shape = (self.img_rows, self.img_cols, self.n_channels)
         self.my_metrics = ['accuracy']
     
