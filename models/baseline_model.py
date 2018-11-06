@@ -7,8 +7,10 @@ class BaseLineModel(BaseModel):
     def __init__(self, config):
         super(BaseLineModel, self).__init__(config)
         self.num_classes = config.data.num_classes
-        self.img_rows = int(config.data.img_rows / config.data.row_scale_factor)
-        self.img_cols = int(config.data.img_cols / config.data.col_scale_factor)
+        # self.img_rows = int(config.data.img_rows / config.data.row_scale_factor)
+        # self.img_cols = int(config.data.img_cols / config.data.col_scale_factor)
+        self.img_rows = config.data.img_rows
+        self.img_cols = config.data.img_cols
         self.n_channels = config.data.n_channels
         self.input_shape = (self.img_rows, self.img_cols, self.n_channels)
         self.my_metrics = ['accuracy']
