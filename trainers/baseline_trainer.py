@@ -40,7 +40,7 @@ class BaseLineModelTrainer(BaseTrain):
             self.callbacks.append(experiment.get_keras_callback())
 
     def train(self):
-        history = self.model.fit(
+        history = self.model.fit_generator(
             self.data[0], self.data[1],
             epochs=self.config.trainer.num_epochs,
             verbose=self.config.trainer.verbose_training,
