@@ -1,6 +1,5 @@
 from base.base_trainer import BaseTrain
-import os
-from keras.callbacks import ModelCheckpoint, TensorBoard
+from utils.common import *
 
 
 class BaseLineModelTrainer(BaseTrain):
@@ -26,6 +25,13 @@ class BaseLineModelTrainer(BaseTrain):
         )
 
         self.callbacks.append(
+            EarlyStopping(monitor='val_loss', mode='min', patience=6)
+        )
+
+        self.callbacks.append(
+            ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, mode='auto', min_delta=0.0001)
+        )
+        self.callbacks.append(
             TensorBoard(
                 log_dir=self.config.callbacks.tensorboard_log_dir,
                 write_graph=self.config.callbacks.tensorboard_write_graph,
@@ -34,20 +40,25 @@ class BaseLineModelTrainer(BaseTrain):
 
         if hasattr(self.config,"comet_api_key"):
             from comet_ml import Experiment
-            experiment = Experiment(api_key=self.config.comet_api_key, project_name=self.config.exp.name, workspce=self.config.exp.workspce)
+            experiment = Experiment(api_key=self.config.comet_api_key, project_name=self.config.exp.name, workspace=self.config.exp.workspace)
             experiment.disable_mp()
             experiment.log_multiple_params(self.config)
             self.callbacks.append(experiment.get_keras_callback())
 
-    def train(self):
+    def train(self, warm_up=False):
+        epochs = self.config.trainer.epochs
+        if warm_up == True:
+            epochs = self.config.trainer.warm_up_epochs
+
         history = self.model.fit_generator(
-            self.data[0], self.data[1],
-            epochs=self.config.trainer.num_epochs,
+            self.data[0],
+            steps_per_epoch=self.config.trainer.steps_per_epoch,
+            validation_data=self.data[1],
+            validation_steps=self.config.trainer.validation_steps,
+            epochs=epochs,
             verbose=self.config.trainer.verbose_training,
-            batch_size=self.config.trainer.batch_size,
-            validation_split=self.config.trainer.validation_split,
-            callbacks=self.callbacks,
-        )
+            callbacks=self.callbacks)
+
         self.loss.extend(history.history['loss'])
         self.acc.extend(history.history['acc'])
         self.val_loss.extend(history.history['val_loss'])

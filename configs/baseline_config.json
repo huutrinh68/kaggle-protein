@@ -6,9 +6,9 @@
     "data":{
         "root_path": "/home/trinhnh1/Documents/train_data/kaggle/human-protein/input",
         "num_classes": 28,
-        "image_rows": 512,
-        "image_cols": 512,
-        "n_channels": 1,
+        "img_rows": 299,
+        "img_cols": 299,
+        "n_channels": 3,
         "row_scale_factor": 4,
         "col_scale_factor": 4,
         "kfold_cv":{
@@ -22,9 +22,20 @@
         "optimizer": "adam"
     },
     "trainer":{
-        "epochs": 30,
-        "batch_size": 128,
-        "shuffle": false
+        "warm_up_epochs": 1,
+        "epochs": 1,
+        "steps_per_epoch": 800,
+        "validation_steps": 200,
+        "batch_size": 16,
+        "verbose_training": true
+    },
+    "callbacks":{
+        "checkpoint_monitor": "val_loss",
+        "checkpoint_mode": "min",
+        "checkpoint_save_best_only": true,
+        "checkpoint_save_weights_only": true,
+        "checkpoint_verbose": true,
+        "tensorboard_write_graph": true
     },
     "comet_api_key": "6LYdLbRq3fQGE6y1SzTvFO2mU"
 }

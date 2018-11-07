@@ -1,53 +1,49 @@
-import keras
-import numpy as np
+from base.base_data_loader import BaseDataLoader
+from utils.common import *
 
-class BaselineModelDataLoader(keras.utils.Sequence):
-    def __init__(self, config, list_ids, labels, image_preprocessor):
-        self.list_ids = list_ids
-        self.labels = labels
-        self.dim = (int(config.data.image_rows/config.data.row_scale_factor), 
-                    int(config.data.image_cols/config.data.col_scale_factor))
-        self.batch_size = config.trainer.batch_size
-        self.n_channels = config.data.n_channels
-        self.num_classes = config.data.num_classes
-        self.shuffle = config.trainer.shuffle
-        self.preprocessor = image_preprocessor
-        self.on_epoch_end()
+class DataGenerator(BaseDataLoader):
+    def __init__(self, config):
+        super(DataGenerator, self).__init__(config)
 
-    def on_epoch_end(self):
-        self.indexes = np.arange(len(self.list_ids))
-        if self.shuffle == True:
-            np.random.shuffle(self.indexes)
-        print(self.indexes)
+    def create_train(self, dataset_info, batch_size, shape, augment=True):
+        assert shape[2] == 3
+        while True:
+            dataset_info = shuffle(dataset_info)
+            for start in range(0, len(dataset_info), batch_size):
+                end = min(start + batch_size, len(dataset_info))
+                X_train_batch = []
+                tmp = dataset_info[start:end]
+                y_train_batch = np.zeros((len(tmp), 28))
+                for i in range(len(tmp)):
+                    image = self.load_image(tmp[i]["path"], shape)
+                    if augment == True:
+                        image = self.augment(image)
+                    X_train_batch.append(image/255.)
+                    y_train_batch[i][tmp[i]["labels"]] = 1
+                yield np.array(X_train_batch), y_train_batch
 
-    def get_label_per_image(self, identifier):
-        return self.labels.loc[self.labels.Id == identifier].drop(
-            ["Id", "Target", "number_of_targets"], axis=1).values
-
-    def data_generation(self, list_ids_temp):
-        'Generates data containing batch_size samples' # X: (n_samples, *dim, n_channels)
-        # Initilization
-        X = np.empty((self.batch_size, *self.dim, self.n_channels))
-        y = np.empty((self.batch_size, self.num_classes), dtype=int)
-        # Generate data
-        for i, identifier in enumerate(list_ids_temp):
-            # Store sample
-            image = self.preprocessor.load_image(identifier)
-            image = self.preprocessor.preprocess(image)
-            X[i] = image
-            # Store class
-            y[i] = self.get_label_per_image(identifier)
-        return X, y
-
-    def get_item(self, index):
-        'Generate one batch of data'
-        # Generate indexes of the batch
-        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
-        # Find list of ids
-        list_id_temp = [self.list_ids[k] for k in indexes]
-        # Generate data
-        X, y = self.data_generation(list_id_temp)
-        return X, y
+    def load_image(self, path, shape):
+        image_red_ch = Image.open(path+"_red.png")
+        image_yellow_ch = Image.open(path+"_yellow.png")
+        image_green_ch = Image.open(path+"_green.png")
+        image_blue_ch = Image.open(path+"_blue.png")
+        # image = np.stack((np.array(image_red_ch), np.array(image_yellow_ch), np.array(image_green_ch), np.array(image_blue_ch)), -1)
+        image = np.stack((np.array(image_red_ch), np.array(image_yellow_ch), np.array(image_green_ch)), -1)
+        image = cv2.resize(image, (shape[0], shape[1]))
+        return image
+    
+    def augment(self, image):
+        augment_img = iaa.Sequential([
+            iaa.OneOf([
+                iaa.Affine(rotate=0),
+                iaa.Affine(rotate=90),
+                iaa.Affine(rotate=180),
+                iaa.Affine(rotate=270),
+                iaa.Fliplr(0.5),
+                iaa.Flipud(0.5)
+            ])], random_order=True)
+        image_aug = augment_img.augment_image(img)
+        return image_aug
 
 
 

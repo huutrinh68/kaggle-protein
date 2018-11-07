@@ -23,13 +23,13 @@ from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential, Model, load_model
 from keras.layers import Activation, Dropout, Flatten, Dense, GlobalMaxPooling2D, BatchNormalization, Input, Conv2D
 from keras.applications.inception_v3 import InceptionV3
-from keras.callbacks import ModelCheckpoint
+from keras.callbacks import ModelCheckpoint, TensorBoard
 from keras import metrics
 from keras.optimizers import Adam 
-from keras.models import 
 import keras.losses
+
 # create callbacks list
-from keras.callbacks import ModelCheckpoint, LearningRateScheduler, EarlyStopping, ReduceLROnPlateau
+from keras.callbacks import LearningRateScheduler, EarlyStopping, ReduceLROnPlateau
 from sklearn.model_selection import train_test_split
 
 # processbar and datetime

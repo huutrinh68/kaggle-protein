@@ -1,53 +1,42 @@
 from base.base_model import BaseModel
-from keras.models import Sequential
-from keras.layers import Conv2D, MaxPooling2D, Dropout, Flatten, Dense
+from keras.models import Sequential, Model
+from keras.layers import Conv2D, MaxPooling2D, Dropout, Flatten, Dense, Input, BatchNormalization
+from keras.applications.inception_v3 import InceptionV3
+from keras.optimizers import Adam
 
 class BaseLineModel(BaseModel):
     
     def __init__(self, config):
         super(BaseLineModel, self).__init__(config)
+        img_rows = config.data.img_rows
+        img_cols = config.data.img_cols
+        n_channels = config.data.n_channels
+        self.input_shape = (img_rows, img_cols, n_channels)
         self.num_classes = config.data.num_classes
-        # self.img_rows = int(config.data.img_rows / config.data.row_scale_factor)
-        # self.img_cols = int(config.data.img_cols / config.data.col_scale_factor)
-        self.img_rows = config.data.img_rows
-        self.img_cols = config.data.img_cols
-        self.n_channels = config.data.n_channels
-        self.input_shape = (self.img_rows, self.img_cols, self.n_channels)
-        self.my_metrics = ['accuracy']
-        self.build_model()
     
     def build_model(self):
-        self.model = Sequential()
-        self.model.add(Conv2D(16, kernel_size=(3, 3), activation='relu', input_shape=self.input_shape))
-        self.model.add(Conv2D(32, (3, 3), activation='relu'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
-        self.model.add(Dropout(0.25))
-        self.model.add(Flatten())
-        self.model.add(Dense(64, activation='relu'))
-        self.model.add(Dropout(0.5))
-        self.model.add(Dense(self.num_classes, activation='sigmoid'))
-        self.model.compile(
-            loss=keras.losses.binary_crossentropy,
-            optimizer=keras.optimizers.Adadelta(),
-            metrics=self.my_metrics
-        )
-    
-    def set_generators(self, train_generator, validation_generator):
-        self.training_generator = train_generator
-        self.validation_generator = validation_generator
-    
-    def learn(self):
-        return self.model.fit_generator(generator=self.training_generator,
-                    validation_data=self.validation_generator,
-                    epochs=self.params.n_epochs, 
-                    use_multiprocessing=True,
-                    workers=8)
-    
-    def score(self):
-        return self.model.evaluate_generator(generator=self.validation_generator,
-                                      use_multiprocessing=True, 
-                                      workers=8)
-    
-    def predict(self, predict_generator):
-        y = predict_generator.predict(self.model)
-        return y
+        input_tensor = Input(shape=self.input_shape)
+        base_model = InceptionV3(include_top=False,
+                                weights='imagenet',
+                                input_shape=self.input_shape)
+        bn = BatchNormalization()(input_tensor)
+        x = base_model(bn)
+        x = Conv2D(32, kernel_size=(1,1), activation='relu')(x)
+        x = Flatten()(x)
+        x = Dropout(0.5)(x)
+        x = Dense(1024, activation='relu')(x)
+        x = Dropout(0.5)(x)
+        output = Dense(self.num_classes, activation='sigmoid')(x)
+        model = Model(input_tensor, output)
+
+        # warm up model
+        for layer in model.layers:
+            layer.trainable = False
+        model.layers[-1].trainable = True
+        model.layers[-2].trainable = True
+        model.layers[-3].trainable = True
+        model.layers[-4].trainable = True
+        model.layers[-5].trainable = True
+        model.layers[-6].trainable = True
+
+        return model
