@@ -4,7 +4,7 @@
         "workspace": "huutrinh68"
     },
     "data":{
-        "root_path": "/home/trinhnh1/Documents/train_data/kaggle/human-protein/input",
+        "root_path": "/home/trinhnh1/Documents/human-protein/input",
         "num_classes": 28,
         "img_rows": 299,
         "img_cols": 299,
@@ -23,13 +23,14 @@
     },
     "trainer":{
         "warm_up_epochs": 1,
-        "epochs": 1,
+        "epochs": 10,
         "steps_per_epoch": 100,
         "validation_steps": 20,
-        "batch_size": 16,
+        "batch_size": 256,
         "verbose_training": true
     },
     "callbacks":{
+        "checkpoint_dir": "/home/trinhnh1/Documents/human-protein/input/working",
         "checkpoint_monitor": "val_loss",
         "checkpoint_mode": "min",
         "checkpoint_save_best_only": true,

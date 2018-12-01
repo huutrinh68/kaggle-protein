@@ -35,6 +35,18 @@ def f1_loss(y_true, y_pred):
     f1 = 2*p*r / (p+r+K.epsilon())
     f1 = tf.where(tf.is_nan(f1), tf.zeros_like(f1), f1)
     return 1-K.mean(f1)
+
+def KerasFocalLoss(target, input):
+    
+    gamma = 2.
+    input = tf.cast(input, tf.float32)
+    
+    max_val = K.clip(-input, 0, 1)
+    loss = input - input * target + max_val + K.log(K.exp(-max_val) + K.exp(-input - max_val))
+    invprobs = tf.log_sigmoid(-input * (target * 2.0 - 1.0))
+    loss = K.exp(invprobs * gamma) * loss
+    
+    return K.mean(K.sum(loss, axis=1))
     
 def main():
     # capture the config path from the run arguments
@@ -91,7 +103,8 @@ def main():
 
     # compile model
     model.compile(
-        loss="binary_crossentropy",
+        # loss="binary_crossentropy",
+        loss=KerasFocalLoss,
         optimizer=Adam(1e-03),
         metrics=["accuracy"])
 
@@ -105,11 +118,14 @@ def main():
         layer.trainable = True
 
     # compile model  
-    model.compile(loss="binary_crossentropy",
-                optimizer=Adam(lr=1e-4),
-                metrics=["accuracy"])
+    model.compile(
+        # loss="binary_crossentropy",
+        loss=KerasFocalLoss,
+        optimizer=Adam(lr=1e-4),
+        metrics=["accuracy"])
     # train model
     trainer.train(warm_up=False)
+    model.save('my_model.h5')
     #******************************* end create then train model ***********************************#
     #################################################################################################
 

@@ -51,5 +51,5 @@ K.set_session(sess)
 import warnings
 warnings.filterwarnings("ignore")
 
-root_path = "/home/trinhnh1/Documents/train_data/kaggle/human-protein/input"
+root_path = "/home/trinhnh1/Documents/human-protein/input"
 start = dt.datetime.now()
