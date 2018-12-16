@@ -113,3 +113,9 @@ experiments/
 datasets/
 
 .idea/
+
+__pycache__
+checkpoints
+logs
+submit
+20181216

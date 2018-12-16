@@ -1,158 +1,222 @@
-from comet_ml import Experiment
-from data_loader.baseline_data_loader import DataGenerator
-from models.baseline_model import BaseLineModel
-from trainers.baseline_trainer import BaseLineModelTrainer
-from utils.common import *
-from utils.config import process_config
-from utils.dirs import create_dirs
-from utils.utils import get_args
+import os 
+import time 
+import json 
+import torch 
+import random 
+import warnings
+import torchvision
+import numpy as np 
+import pandas as pd 
 
-def f1(y_true, y_pred):
-    y_pred = K.round(y_pred)
-    tp = K.sum(K.cast(y_true*y_pred, 'float'), axis=0)
-    tn = K.sum(K.cast((1-y_true)*(1-y_pred), 'float'), axis=0)
-    fp = K.sum(K.cast((1-y_true)*y_pred, 'float'), axis=0)
-    fn = K.sum(K.cast(y_true*(1-y_pred), 'float'), axis=0)
+from utils import *
+from data import HumanDataset
+from tqdm import tqdm 
+from config import config
+from datetime import datetime
+from models.model import *
+from torch import nn,optim
+from collections import OrderedDict
+from torch.autograd import Variable
+from torch.utils.data import DataLoader
+from torch.optim import lr_scheduler
+from sklearn.model_selection import train_test_split
+from timeit import default_timer as timer
+from sklearn.metrics import f1_score
+# 1. set random seed
+random.seed(2050)
+np.random.seed(2050)
+torch.manual_seed(2050)
+torch.cuda.manual_seed_all(2050)
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+torch.backends.cudnn.benchmark = True
+warnings.filterwarnings('ignore')
 
-    p = tp / (tp + fp + K.epsilon())
-    r = tp / (tp + fn + K.epsilon())
+if not os.path.exists("./logs/"):
+    os.mkdir("./logs/")
 
-    f1 = 2*p*r / (p+r+K.epsilon())
-    f1 = tf.where(tf.is_nan(f1), tf.zeros_like(f1), f1)
-    return K.mean(f1)
+log = Logger()
+log.open("logs/%s_log_train.txt"%config.model_name,mode="a")
+log.write("\n----------------------------------------------- [START %s] %s\n\n" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '-' * 51))
+log.write('                           |------------ Train -------------|----------- Valid -------------|----------Best Results---------|------------|\n')
+log.write('mode     iter     epoch    |         loss   f1_macro        |         loss   f1_macro       |         loss   f1_macro       | time       |\n')
+log.write('-------------------------------------------------------------------------------------------------------------------------------\n')
 
-def f1_loss(y_true, y_pred):
-    
-    #y_pred = K.cast(K.greater(K.clip(y_pred, 0, 1), THRESHOLD), K.floatx())
-    tp = K.sum(K.cast(y_true*y_pred, 'float'), axis=0)
-    tn = K.sum(K.cast((1-y_true)*(1-y_pred), 'float'), axis=0)
-    fp = K.sum(K.cast((1-y_true)*y_pred, 'float'), axis=0)
-    fn = K.sum(K.cast(y_true*(1-y_pred), 'float'), axis=0)
+def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,start):
+    losses = AverageMeter()
+    f1 = AverageMeter()
+    model.train()
+    for i,(images,target) in enumerate(train_loader):
+        images = images.cuda(non_blocking=True)
+        target = torch.from_numpy(np.array(target)).float().cuda(non_blocking=True)
+        # compute output
+        output = model(images)
+        loss = criterion(output,target)
+        losses.update(loss.item(),images.size(0))
+        
+        f1_batch = f1_score(target,output.sigmoid().cpu() > 0.15,average='macro')
+        f1.update(f1_batch,images.size(0))
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        print('\r',end='',flush=True)
+        message = '%s %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
+                "train", i/len(train_loader) + epoch, epoch,
+                losses.avg, f1.avg, 
+                valid_loss[0], valid_loss[1], 
+                str(best_results[0])[:8],str(best_results[1])[:8],
+                time_to_str((timer() - start),'min'))
+        print(message , end='',flush=True)
+    log.write("\n")
+    #log.write(message)
+    #log.write("\n")
+    return [losses.avg,f1.avg]
 
-    p = tp / (tp + fp + K.epsilon())
-    r = tp / (tp + fn + K.epsilon())
+# 2. evaluate fuunction
+def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
+    # only meter loss and f1 score
+    losses = AverageMeter()
+    f1 = AverageMeter()
+    # switch mode for evaluation
+    model.cuda()
+    model.eval()
+    with torch.no_grad():
+        for i, (images,target) in enumerate(val_loader):
+            images_var = images.cuda(non_blocking=True)
+            target = torch.from_numpy(np.array(target)).float().cuda(non_blocking=True)
+            #image_var = Variable(images).cuda()
+            #target = Variable(torch.from_numpy(np.array(target)).long()).cuda()
+            output = model(images_var)
+            loss = criterion(output,target)
+            losses.update(loss.item(),images_var.size(0))
+            f1_batch = f1_score(target,output.sigmoid().cpu().data.numpy() > 0.15,average='macro')
+            f1.update(f1_batch,images_var.size(0))
+            print('\r',end='',flush=True)
+            message = '%s   %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
+                    "val", i/len(val_loader) + epoch, epoch,                    
+                    train_loss[0], train_loss[1], 
+                    losses.avg, f1.avg,
+                    str(best_results[0])[:8],str(best_results[1])[:8],
+                    time_to_str((timer() - start),'min'))
 
-    f1 = 2*p*r / (p+r+K.epsilon())
-    f1 = tf.where(tf.is_nan(f1), tf.zeros_like(f1), f1)
-    return 1-K.mean(f1)
+            print(message, end='',flush=True)
+        log.write("\n")
+        #log.write(message)
+        #log.write("\n")
+        
+    return [losses.avg,f1.avg]
 
-def KerasFocalLoss(target, input):
-    
-    gamma = 2.
-    input = tf.cast(input, tf.float32)
-    
-    max_val = K.clip(-input, 0, 1)
-    loss = input - input * target + max_val + K.log(K.exp(-max_val) + K.exp(-input - max_val))
-    invprobs = tf.log_sigmoid(-input * (target * 2.0 - 1.0))
-    loss = K.exp(invprobs * gamma) * loss
-    
-    return K.mean(K.sum(loss, axis=1))
-    
+# 3. test model on public dataset and save the probability matrix
+def test(test_loader,model,folds):
+    sample_submission_df = pd.read_csv("/media/trinhnh1/3A08638408633DCF/kaggle/human-protein/input/sample_submission.csv")
+    #3.1 confirm the model converted to cuda
+    filenames,labels ,submissions= [],[],[]
+    model.cuda()
+    model.eval()
+    submit_results = []
+    for i,(input,filepath) in enumerate(tqdm(test_loader)):
+        #3.2 change everything to cuda and get only basename
+        filepath = [os.path.basename(x) for x in filepath]
+        with torch.no_grad():
+            image_var = input.cuda(non_blocking=True)
+            y_pred = model(image_var)
+            label = y_pred.sigmoid().cpu().data.numpy()
+            #print(label > 0.5)
+           
+            labels.append(label > 0.15)
+            filenames.append(filepath)
+
+    for row in np.concatenate(labels):
+        subrow = ' '.join(list([str(i) for i in np.nonzero(row)[0]]))
+        submissions.append(subrow)
+    sample_submission_df['Predicted'] = submissions
+    sample_submission_df.to_csv('./submit/%s_bestloss_submission.csv'%config.model_name, index=None)
+
+# 4. main function
 def main():
-    # capture the config path from the run arguments
-    # then process the json configuration file
-    try:
-        args = get_args()
-        config = process_config(args.config)
-    except:
-        print("missing or invalid arguments")
-        exit(0)
-
-    # create the experiments dirs
-    create_dirs([config.callbacks.tensorboard_log_dir, config.callbacks.checkpoint_dir])
-
-
-
-    #################################################################################################
-    #******************************start create train-validation data ******************************#
-    path_to_train = os.path.join(root_path, 'train')
-    data = pd.read_csv(os.path.join(root_path, 'train.csv'))
-
-    SIZE = config.data.img_cols
-    n_channels = config.data.n_channels
-    batch_size = config.trainer.batch_size
-
-    train_dataset_info = []
-    for name, labels in zip(data['Id'], data['Target'].str.split(' ')):
-        train_dataset_info.append({
-            'path':os.path.join(path_to_train, name),
-            'labels':np.array([int(label) for label in labels])})
-    train_dataset_info = np.array(train_dataset_info)
-
-    indexes = np.arange(train_dataset_info.shape[0])
-    np.random.shuffle(indexes)
-
-    train_indexes, valid_indexes = train_test_split(indexes, test_size=0.15, random_state=0)
+    fold = 0
+    # 4.1 mkdirs
+    if not os.path.exists(config.submit):
+        os.makedirs(config.submit)
+    if not os.path.exists(config.weights + config.model_name + os.sep +str(fold)):
+        os.makedirs(config.weights + config.model_name + os.sep +str(fold))
+    if not os.path.exists(config.best_models):
+        os.mkdir(config.best_models)
+    if not os.path.exists("./logs/"):
+        os.mkdir("./logs/")
     
-    data_generator = DataGenerator(config)
-    train_generator = data_generator.create_train(train_dataset_info[train_indexes], batch_size, (SIZE, SIZE, n_channels), augment=False)
-    valid_generator = data_generator.create_train(train_dataset_info[valid_indexes], batch_size, (SIZE, SIZE, n_channels), augment=False)
-    
-    data_train_valid = []
-    data_train_valid.append(train_generator)
-    data_train_valid.append(valid_generator)
-    #*******************************end create train-validation data *******************************#
-    #################################################################################################
+    # 4.2 get model
+    model = get_net()
+    model.cuda()
 
+    # criterion
+    optimizer = optim.SGD(model.parameters(),lr = config.lr,momentum=0.9,weight_decay=1e-4)
+    criterion = nn.BCEWithLogitsLoss().cuda()
+    #criterion = FocalLoss().cuda()
+    #criterion = F1Loss().cuda()
+    start_epoch = 0
+    best_loss = 999
+    best_f1 = 0
+    best_results = [np.inf,0]
+    val_metrics = [np.inf,0]
+    resume = False
+    df1 = pd.read_csv("/media/trinhnh1/3A08638408633DCF/kaggle/human-protein/input/train.csv")
+    df2 = pd.read_csv("/media/trinhnh1/3A08638408633DCF/kaggle/human-protein/input/external_data/img/train.csv")
+    all_files = pd.concat([df1, df2])
+    #print(all_files)
+    test_files = pd.read_csv("/media/trinhnh1/3A08638408633DCF/kaggle/human-protein/input/sample_submission.csv")
+    train_data_list,val_data_list = train_test_split(all_files,test_size = 0.13,random_state = 2050)
 
+    # load dataset
+    train_gen = HumanDataset(train_data_list,config.train_data,mode="train")
+    train_loader = DataLoader(train_gen,batch_size=config.batch_size,shuffle=True,pin_memory=True,num_workers=4)
 
-    #################################################################################################
-    #*******************************   start create then train model *******************************#
-    print('Create the model.')
-    model = BaseLineModel(config).build_model()
+    val_gen = HumanDataset(val_data_list,config.train_data,augument=False,mode="train")
+    val_loader = DataLoader(val_gen,batch_size=config.batch_size,shuffle=False,pin_memory=True,num_workers=4)
 
-    # compile model
-    model.compile(
-        # loss="binary_crossentropy",
-        loss=KerasFocalLoss,
-        optimizer=Adam(1e-03),
-        metrics=["accuracy"])
+    test_gen = HumanDataset(test_files,config.test_data,augument=False,mode="test")
+    test_loader = DataLoader(test_gen,1,shuffle=False,pin_memory=True,num_workers=4)
 
-    # train model
-    print('Create the trainer')
-    trainer = BaseLineModelTrainer(model, data_train_valid, config)
-    trainer.train(warm_up=True)
+    scheduler = lr_scheduler.StepLR(optimizer,step_size=10,gamma=0.1)
+    start = timer()
 
-    # train all layers
-    for layer in model.layers:
-        layer.trainable = True
-
-    # compile model  
-    model.compile(
-        # loss="binary_crossentropy",
-        loss=KerasFocalLoss,
-        optimizer=Adam(lr=1e-4),
-        metrics=["accuracy"])
-    # train model
-    trainer.train(warm_up=False)
-    model.save('my_model.h5')
-    #******************************* end create then train model ***********************************#
-    #################################################################################################
-
-
-
-    #################################################################################################
-    #***********************************start create submit *****************************************#
-    # create submit
-    submit = pd.read_csv(os.path.join(root_path, "sample_submission.csv"))
-    predicted = []
-    draw_predict = []
-    model.load_weights(os.path.join(root_path, "working/InceptionV3.h5"))
-
-    for name in tqdm(submit["Id"]):
-        path = os.path.join(root_path, "test", name)
-        image = data_generator.load_image(path, (SIZE, SIZE, 3))/255.
-        score_predict = model.predict(image[np.newaxis])[0]
-        draw_predict.append(score_predict)
-        label_predict = np.arange(28)[score_predict>=0.2]
-        str_predict_label = ' '.join(str(l) for l in label_predict)
-        predicted.append(str_predict_label)
-
-    submit["Predicted"] = predicted
-    np.save("draw_predict_InceptionV3.npy", score_predict)
-    submit.to_csv('submit_InceptionV3.csv', index=False)
-    #*************************************end create submit ****************************************#
-    #################################################################################################
-
-if __name__ == '__main__':
+    #train
+    for epoch in range(0,config.epochs):
+        scheduler.step(epoch)
+        # train
+        lr = get_learning_rate(optimizer)
+        train_metrics = train(train_loader,model,criterion,optimizer,epoch,val_metrics,best_results,start)
+        # val
+        val_metrics = evaluate(val_loader,model,criterion,epoch,train_metrics,best_results,start)
+        # check results 
+        is_best_loss = val_metrics[0] < best_results[0]
+        best_results[0] = min(val_metrics[0],best_results[0])
+        is_best_f1 = val_metrics[1] > best_results[1]
+        best_results[1] = max(val_metrics[1],best_results[1])   
+        # save model
+        save_checkpoint({
+                    "epoch":epoch + 1,
+                    "model_name":config.model_name,
+                    "state_dict":model.state_dict(),
+                    "best_loss":best_results[0],
+                    "optimizer":optimizer.state_dict(),
+                    "fold":fold,
+                    "best_f1":best_results[1],
+        },is_best_loss,is_best_f1,fold)
+        # print logs
+        print('\r',end='',flush=True)
+        log.write('%s  %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
+                "best", epoch, epoch,                    
+                train_metrics[0], train_metrics[1], 
+                val_metrics[0], val_metrics[1],
+                str(best_results[0])[:8],str(best_results[1])[:8],
+                time_to_str((timer() - start),'min'))
+            )
+        log.write("\n")
+        time.sleep(0.01)
+        
+    best_model = torch.load("%s/%s_fold_%s_model_best_loss.pth.tar"%(config.best_models,config.model_name,str(fold)))
+    #best_model = torch.load("checkpoints/bninception_bcelog/0/checkpoint.pth.tar")
+    model.load_state_dict(best_model["state_dict"])
+    test(test_loader,model,fold)
+if __name__ == "__main__":
     main()
