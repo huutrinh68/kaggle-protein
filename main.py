@@ -167,6 +167,10 @@ def main():
     test_gen = HumanDataset(test_files,config.test_data,augument=False,mode="test")
     test_loader = DataLoader(test_gen,1,shuffle=False,pin_memory=True,num_workers=4)
 
+    # class weight
+    weights = cls_wts(name_label_dict, 0.3)[1]
+    class_weights = torch.FloatTensor(weights).cuda()
+
     start = timer()
     
     # 4.2 get model
@@ -184,7 +188,7 @@ def main():
     
     # criterion
     optimizer = optim.SGD(model.parameters(),lr = config.lr_ft,momentum=0.9,weight_decay=1e-4)
-    criterion = nn.BCEWithLogitsLoss().cuda()
+    criterion = nn.BCEWithLogitsLoss(weight=class_weights).cuda()
 
     scheduler = lr_scheduler.StepLR(optimizer,step_size=10,gamma=0.1)
 
@@ -230,7 +234,7 @@ def main():
 
     # criterion
     optimizer = optim.SGD(model.parameters(),lr = config.lr,momentum=0.9,weight_decay=1e-4)
-    criterion = nn.BCEWithLogitsLoss().cuda()
+    criterion = nn.BCEWithLogitsLoss(weight=class_weights).cuda()
     #criterion = FocalLoss().cuda()
     #criterion = F1Loss().cuda()
 
