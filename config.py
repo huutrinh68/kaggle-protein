@@ -1,10 +1,10 @@
 class DefaultConfigs(object):
-    train_data = "/home/trinhnh1/Documents/kaggle/human-protein/input/train_all/" # where is your train data
-    # train_data = "/media/trinhnh1/3A08638408633DCF/kaggle/human-protein/input/external_data/img/train_all/"
-    test_data = "/home/trinhnh1/Documents/kaggle/human-protein/input/test_jpg/"   # your test data
-    sample_submission = "/home/trinhnh1/Documents/kaggle/human-protein/input/sample_submission.csv"
-    train_kaggle_csv = "/home/trinhnh1/Documents/kaggle/human-protein/input/train.csv"
-    train_external_csv = "/home/trinhnh1/Documents/kaggle/human-protein/input/external_data/img/train.csv"
+    root_path = "/home/trinhnh1/Documents/kaggle/human-protein/input"
+    train_data = root_path + "/train_all/" # where is your train data
+    test_data = root_path + "/test_jpg/"   # your test data
+    sample_submission = root_path + "/sample_submission.csv"
+    train_kaggle_csv = root_path + "/train.csv"
+    train_external_csv = root_path + "/external_data/img/train.csv"
     weights = "./checkpoints/"
     best_models = "./checkpoints/best_models"
     submit = "./submit/"
