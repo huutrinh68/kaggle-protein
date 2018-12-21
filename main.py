@@ -22,8 +22,10 @@ from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
 from sklearn.model_selection import train_test_split
 from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
+from sklearn.preprocessing import MultiLabelBinarizer
 from timeit import default_timer as timer
 from sklearn.metrics import f1_score
+
 # 1. set random seed
 random.seed(config.seed)
 np.random.seed(config.seed)
@@ -33,16 +35,18 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.backends.cudnn.benchmark = True
 warnings.filterwarnings('ignore')
 
+# create log folder
 if not os.path.exists("./logs/"):
     os.mkdir("./logs/")
-
+    
 log = Logger()
-log.open("logs/%s_log_train.txt"%config.model_name,mode="a")
+log.open("./logs/%s_log_train.txt"%config.model_name, mode="a")
 log.write("\n----------------------------------------------- [START %s] %s\n\n" % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '-' * 51))
 log.write('                           |------------ Train -------------|----------- Valid -------------|----------Best Results---------|------------|\n')
 log.write('mode     iter     epoch    |         loss   f1_macro        |         loss   f1_macro       |         loss   f1_macro       | time       |\n')
 log.write('-------------------------------------------------------------------------------------------------------------------------------\n')
 
+# 2. train function
 def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,start):
     losses = AverageMeter()
     f1 = AverageMeter()
@@ -73,7 +77,7 @@ def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,s
     #log.write("\n")
     return [losses.avg,f1.avg]
 
-# 2. evaluate fuunction
+# 3. val function
 def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
     # only meter loss and f1 score
     losses = AverageMeter()
@@ -107,15 +111,16 @@ def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
         
     return [losses.avg,f1.avg]
 
-# 3. test model on public dataset and save the probability matrix
-def test(test_loader,model,folds):
-    sample_submission_df = pd.read_csv("/media/trinhnh1/3A08638408633DCF/kaggle/human-protein/input/sample_submission.csv")
-    #3.1 confirm the model converted to cuda
-    filenames,labels ,submissions= [],[],[]
+
+# 4. test model on public dataset and save the probability matrix 
+def test(test_loader, model, fold):
+    sample_submission_df = pd.read_csv(config.sample_submission)
+    #2.1 confirm the model converted to cuda
+    filenames, labels, submissions = [], [], []
     model.cuda()
     model.eval()
     submit_results = []
-    for i,(input,filepath) in enumerate(tqdm(test_loader)):
+    for i, (input, filepath) in enumerate(tqdm(test_loader)):
         #3.2 change everything to cuda and get only basename
         filepath = [os.path.basename(x) for x in filepath]
         with torch.no_grad():
@@ -131,169 +136,169 @@ def test(test_loader,model,folds):
         subrow = ' '.join(list([str(i) for i in np.nonzero(row)[0]]))
         submissions.append(subrow)
     sample_submission_df['Predicted'] = submissions
-    sample_submission_df.to_csv('./submit/%s_bestloss_submission.csv'%config.model_name, index=None)
+    sample_submission_df.to_csv('./submit/{}_{}_bestloss_submission.csv'.format(config.model_name, fold), index=None)
 
-# 4. main function
+
+def train_model(model, train_loader, val_loader, val_metrics, best_results, \
+                class_weights, learning_rate, step_size, epochs, \
+                start, fold, config, log):
+    # criterion
+    criterion = nn.BCEWithLogitsLoss(weight=class_weights).cuda()
+    # optimizer
+    optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-4)
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=0.1)
+
+    # train and valid model
+    for epoch in range(epochs):
+        scheduler.step(epoch)
+        lr = get_learning_rate(optimizer)
+        
+        # train
+        train_metrics = train(train_loader, model, criterion, optimizer, epoch, val_metrics, best_results, start)
+        # val
+        val_metrics = evaluate(val_loader, model, criterion, epoch, train_metrics, best_results, start)
+
+        # check loss is decrease or not, then save lower loss
+        is_best_loss = val_metrics[0] < best_results[0]
+        best_results[0] = min(val_metrics[0], best_results[0])
+        
+        # check f1 score is increase or not, then save higher f1 score
+        is_best_f1 = val_metrics[1] > best_results[1]
+        best_results[1] = max(val_metrics[1], best_results[1])
+
+        # save model
+        save_checkpoint({
+            "epoch":epoch + 1,
+            "model_name":config.model_name,
+            "state_dict":model.state_dict(),
+            "best_loss":best_results[0],
+            "optimizer":optimizer.state_dict(),
+            "fold":fold,
+            "best_f1":best_results[1],
+        }, is_best_loss, is_best_f1, fold)
+
+        # print logs
+        print('\r',end='',flush=True)
+        log.write('%s  %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
+            "best", epoch, epoch,                    
+            train_metrics[0], train_metrics[1], 
+            val_metrics[0], val_metrics[1],
+            str(best_results[0])[:8], str(best_results[1])[:8],
+            time_to_str((timer() - start),'min')))
+        log.write("\n")
+        time.sleep(0.01)
+
+# 5. main function
 def main():
-    fold = 0
-    # 4.1 mkdirs
+    # 5.1 make folder
     if not os.path.exists(config.submit):
         os.makedirs(config.submit)
-    if not os.path.exists(config.weights + config.model_name + os.sep +str(fold)):
-        os.makedirs(config.weights + config.model_name + os.sep +str(fold))
+    for fold in range(config.kfold):
+        if not os.path.exists(config.weights + config.model_name + os.sep + str(fold)):
+            os.makedirs(config.weights + config.model_name + os.sep + str(fold))
     if not os.path.exists(config.best_models):
         os.mkdir(config.best_models)
     if not os.path.exists("./logs/"):
         os.mkdir("./logs/")
-    
+
     start_epoch = 0
     best_loss = 999
     best_f1 = 0
-    best_results = [np.inf,0]
-    val_metrics = [np.inf,0]
+    best_results = [np.inf, 0]
+    val_metrics = [np.inf, 0]
     resume = False
+    start = timer()
+
+    # get train
+    # train data, this data include external data
+    df1 = pd.read_csv(config.train_kaggle_csv)
+    df2 = pd.read_csv(config.train_external_csv)
+    all_files = pd.concat([df1, df2])
     
-    # class weight
+    # get test data, this use for making submission file
+    test_files = pd.read_csv(config.sample_submission)   
+    # test data
+    test_gen = HumanDataset(test_files, config.test_data, augument=False, mode="test")
+    test_loader = DataLoader(test_gen, 1, shuffle=False, pin_memory=True, num_workers=4)
+
+    # class weight. This is imbalanced data problem, so we will add class weight to loss function
     weights = cls_wts(name_label_dict, 0.3)[1]
     class_weights = torch.FloatTensor(weights).cuda()
 
-    start = timer()
-    
-    # 4.2 get model
+    # get model
     model = get_net()
     model.cuda()
     
-    # test data
-    test_files = pd.read_csv("/media/trinhnh1/3A08638408633DCF/kaggle/human-protein/input/sample_submission.csv")
-
-    # train data
-    df1 = pd.read_csv("/media/trinhnh1/3A08638408633DCF/kaggle/human-protein/input/train.csv")
-    df2 = pd.read_csv("/media/trinhnh1/3A08638408633DCF/kaggle/human-protein/input/external_data/img/train.csv")
-    all_files = pd.concat([df1, df2])
-    # train_data_list,val_data_list = train_test_split(all_files,test_size = 0.13,random_state = config.seed) #normal method, but it is not good way for this problem
-    
-    # set kfold=5
-    msss = MultilabelStratifiedShuffleSplit(n_splits=5, test_size=0.1, random_state=config.seed)
+    # use kfold cross validation to find out best model. 
+    # because this problem has imbalanced data, we use advanced split method. Scikitlearn is not strong enough.
+    msss = MultilabelStratifiedShuffleSplit(n_splits=config.kfold, test_size=0.13, random_state=config.seed)
     all_files_org = all_files.copy()
     all_files_org['Target'] = all_files_org.apply(lambda x: x['Target'].split(' '), axis=1)
-
     X = all_files_org['Id'].tolist()
     y = all_files_org['Target'].tolist()
     y = MultiLabelBinarizer().fit_transform(y)
 
-    for train_data_list, val_data_list in msss.split(X,y):
-        print("Train:", train_data_list, "Valid:", val_data_list)
-        # load dataset
-        train_gen = HumanDataset(train_data_list,config.train_data,mode="train")
-        train_loader = DataLoader(train_gen,batch_size=config.batch_size,shuffle=True,pin_memory=True,num_workers=4)
+    for fold, (train_data_list, val_data_list) in enumerate(msss.split(X, y)):        
+        # extract data into dataframe format using id
+        df_train_data_list = all_files_org.iloc[train_data_list]
+        df_val_data_list = all_files_org.iloc[val_data_list]
 
-        val_gen = HumanDataset(val_data_list,config.train_data,augument=False,mode="train")
-        val_loader = DataLoader(val_gen,batch_size=config.batch_size,shuffle=False,pin_memory=True,num_workers=4)
+        train_gen = HumanDataset(df_train_data_list, config.train_data, mode="train")
+        train_loader = DataLoader(train_gen, batch_size=config.batch_size, shuffle=True, pin_memory=True, num_workers=4)        
+        # val data
+        val_gen = HumanDataset(df_val_data_list, config.train_data, augument=False, mode="train")
+        val_loader = DataLoader(val_gen, batch_size=config.batch_size, shuffle=False, pin_memory=True, num_workers=4)
 
-        test_gen = HumanDataset(test_files,config.test_data,augument=False,mode="test")
-        test_loader = DataLoader(test_gen,1,shuffle=False,pin_memory=True,num_workers=4)
 
-        # #============================================================================================================
-        # freeze all layers
-        for param in model.parameters():
-            param.requires_grad = False
-        
-        # train 2 last layers
-        list(model.parameters())[-1].requires_grad = True
-        list(model.parameters())[-2].requires_grad = True
-        
-        # criterion
-        optimizer = optim.SGD(model.parameters(),lr = config.lr_ft,momentum=0.9,weight_decay=1e-4)
-        criterion = nn.BCEWithLogitsLoss(weight=class_weights).cuda()
+        # This operations run only-one time to warm up model
+        if fold == 0:
+            # freeze all layers. 
+            for param in model.parameters():
+                param.requires_grad = False
+            # enable 2 last layers
+            list(model.parameters())[-1].requires_grad = True
+            list(model.parameters())[-2].requires_grad = True
+                
+            epochs = config.epochs_ft
+            learning_rate = config.lr_ft
+            step_size = 10
 
-        scheduler = lr_scheduler.StepLR(optimizer,step_size=10,gamma=0.1)
+            train_model(model, train_loader, val_loader, val_metrics, best_results,
+                    class_weights, learning_rate, step_size, epochs,
+                    start, fold, config, log)
 
-        #train
-        for epoch in range(0,config.epochs_ft):
-            scheduler.step(epoch)
-            # train
-            lr = get_learning_rate(optimizer)
-            train_metrics = train(train_loader,model,criterion,optimizer,epoch,val_metrics,best_results,start)
-            # val
-            val_metrics = evaluate(val_loader,model,criterion,epoch,train_metrics,best_results,start)
-            # check results 
-            is_best_loss = val_metrics[0] < best_results[0]
-            best_results[0] = min(val_metrics[0],best_results[0])
-            is_best_f1 = val_metrics[1] > best_results[1]
-            best_results[1] = max(val_metrics[1],best_results[1])   
-            # save model
-            save_checkpoint({
-                        "epoch":epoch + 1,
-                        "model_name":config.model_name,
-                        "state_dict":model.state_dict(),
-                        "best_loss":best_results[0],
-                        "optimizer":optimizer.state_dict(),
-                        "fold":fold,
-                        "best_f1":best_results[1],
-            },is_best_loss,is_best_f1,fold)
-            # print logs
-            print('\r',end='',flush=True)
-            log.write('%s  %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
-                    "best", epoch, epoch,                    
-                    train_metrics[0], train_metrics[1], 
-                    val_metrics[0], val_metrics[1],
-                    str(best_results[0])[:8],str(best_results[1])[:8],
-                    time_to_str((timer() - start),'min'))
-                )
-            log.write("\n")
-            time.sleep(0.01)
+            # unfreeze all layers
+            for param in model.parameters():
+                param.requires_grad = True
 
-        #============================================================================================================
-        # unfreeze all layers
-        for param in model.parameters():
-            param.requires_grad = True
+            epochs = config.epochs
+            learning_rate = config.lr
+            step_size = 7    
+        else:
+            # unfreeze all layers
+            for param in model.parameters():
+                param.requires_grad = True
+            
+            epochs = config.epochs
+            learning_rate = config.lr
+            step_size = 7
 
-        # criterion
-        optimizer = optim.SGD(model.parameters(),lr = config.lr,momentum=0.9,weight_decay=1e-4)
-        criterion = nn.BCEWithLogitsLoss(weight=class_weights).cuda()
-
-        scheduler = lr_scheduler.StepLR(optimizer,step_size=50,gamma=0.1)
-        
-        #train
-        for epoch in range(0,config.epochs):
-            scheduler.step(epoch)
-            # train
-            lr = get_learning_rate(optimizer)
-            train_metrics = train(train_loader,model,criterion,optimizer,epoch,val_metrics,best_results,start)
-            # val
-            val_metrics = evaluate(val_loader,model,criterion,epoch,train_metrics,best_results,start)
-            # check results 
-            is_best_loss = val_metrics[0] < best_results[0]
-            best_results[0] = min(val_metrics[0],best_results[0])
-            is_best_f1 = val_metrics[1] > best_results[1]
-            best_results[1] = max(val_metrics[1],best_results[1])   
-            # save model
-            save_checkpoint({
-                        "epoch":epoch + 1,
-                        "model_name":config.model_name,
-                        "state_dict":model.state_dict(),
-                        "best_loss":best_results[0],
-                        "optimizer":optimizer.state_dict(),
-                        "fold":fold,
-                        "best_f1":best_results[1],
-            },is_best_loss,is_best_f1,fold)
-            # print logs
-            print('\r',end='',flush=True)
-            log.write('%s  %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
-                    "best", epoch, epoch,                    
-                    train_metrics[0], train_metrics[1], 
-                    val_metrics[0], val_metrics[1],
-                    str(best_results[0])[:8],str(best_results[1])[:8],
-                    time_to_str((timer() - start),'min'))
-                )
-            log.write("\n")
-            time.sleep(0.01)
+        # train all unfreeze layers
+        train_model(model, train_loader, val_loader, val_metrics, best_results,
+                class_weights, learning_rate, step_size, epochs,
+                start, fold, config, log)
+    
+    # release memory
     del X, y
     gc.collect()
-    
-    best_model = torch.load("%s/%s_fold_%s_model_best_loss.pth.tar"%(config.best_models,config.model_name,str(fold)))
-    #best_model = torch.load("checkpoints/bninception_bcelog/0/checkpoint.pth.tar")
-    model.load_state_dict(best_model["state_dict"])
-    test(test_loader,model,fold)
-if __name__ == "__main__":
+
+    """
+    for fold in range(config.kfold):
+        # load best model to make submission file
+        best_model = torch.load("{}/{}_fold_{}_model_best_loss.pth.tar".format(config.best_models, config.model_name, str(fold)))
+        #best_model = torch.load("checkpoints/bninception_bcelog/0/checkpoint.pth.tar")
+        model.load_state_dict(best_model["state_dict"])
+        test(test_loader, model, str(fold))
+    """
+if __name__ == '__main__':
     main()
