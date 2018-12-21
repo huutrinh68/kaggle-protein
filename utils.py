@@ -3,7 +3,7 @@ import sys
 import json
 import torch
 import shutil
-import numpy as np 
+import numpy as np
 import math
 from config import config
 from torch import nn
