@@ -310,6 +310,15 @@ def main():
                     time_to_str((timer() - start),'min')))
                 log.write("\n")
                 time.sleep(0.01)
+            
+            # unfreeze all layers to prapare for trainning all layers later
+            for param in model.parameters():
+                param.requires_grad = True
+            
+        # criterion
+        criterion = nn.BCEWithLogitsLoss(weight=class_weights).cuda()
+        
+            
 
                 
                 
