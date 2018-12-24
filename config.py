@@ -6,19 +6,15 @@ class DefaultConfigs(object):
     train_kaggle_csv = root_path + "/train.csv"
     train_external_csv = root_path + "/external_data/img/train.csv"
     weights = "./checkpoints/"
-    best_models = "./checkpoints/best_models"
+    best_models = "./checkpoints/best_models/"
     submit = "./submit/"
     model_name = "resnet50_bcelog"
     num_classes = 28
     img_weight = 512
     img_height = 512
     channels = 4
-    lr = 1e-03
-    lr_ft = 0.02
+    lr = 0.03
     batch_size = 20
-    epochs = 45
-    epochs_ft = 2
-    seed = 2050
-    kfold = 5
+    epochs = 50
 
 config = DefaultConfigs()

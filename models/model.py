@@ -1,15 +1,13 @@
 from torchvision import models
-from pretrainedmodels.models import resnet34, resnet50, resnet152, bninception
+from pretrainedmodels.models import bninception
 from torch import nn
 from config import config
 from collections import OrderedDict
 import torch.nn.functional as F
 import torch
 
-
 def get_net():
     model = models.resnet50(pretrained=True)
-
     # get the pre-trained weights
     pretrained_weights = list(model.parameters())
     
@@ -18,5 +16,5 @@ def get_net():
     model.avgpool = nn.AdaptiveAvgPool2d(1)
     num_ftrs = model.fc.in_features
     model.fc = nn.Linear(num_ftrs, config.num_classes)
-    
+
     return model

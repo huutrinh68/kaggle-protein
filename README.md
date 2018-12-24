@@ -1,14 +1,5 @@
 # kaggle_human_protein_baseline
-Human Protein Atlas Image Classification baseline:0.461
-
-
-
-    
-- [Blog](http://www.spytensor.com/)
-- [GitHub](https://github.com/spytensor)
-- [Human Protein Atlas Image Classification](https://www.kaggle.com/c/human-protein-atlas-image-classification)
-- [Pytorch Baseline 0.461](https://www.kaggle.com/c/human-protein-atlas-image-classification/discussion/72812)
-
+Human Protein Atlas Image Classification baseline:0.456
 
 # 1. requirements
 

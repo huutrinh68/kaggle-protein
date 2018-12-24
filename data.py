@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms as T
 from sklearn.preprocessing import MultiLabelBinarizer
 from imgaug import augmenters as iaa
-import random 
+import random
 import pathlib
 
 # set random seed
@@ -32,8 +32,8 @@ class HumanDataset(Dataset):
     def __getitem__(self,index):
         X = self.read_images(index)
         if not self.mode == "test":
-            labels = np.array(list(map(int, self.images_df.iloc[index].Target)))
-            y = np.eye(config.num_classes,dtype=np.float)[labels].sum(axis=0)
+            labels = np.array(list(map(int, self.images_df.iloc[index].Target.split(' '))))
+            y  = np.eye(config.num_classes,dtype=np.float)[labels].sum(axis=0)
         else:
             y = str(self.images_df.iloc[index].Id.absolute())
         if self.augument:
