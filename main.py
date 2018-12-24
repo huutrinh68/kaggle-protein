@@ -143,7 +143,10 @@ def train_model(model, train_loader, val_loader, val_metrics, best_results, \
                 class_weights, learning_rate, step_size, epochs, \
                 start, fold, config, log):
     # criterion
-    criterion = nn.BCEWithLogitsLoss(weight=class_weights).cuda()
+    if class_weights is not None:
+        criterion = nn.BCEWithLogitsLoss(weight=class_weights).cuda()
+    else:
+        criterion = nn.BCEWithLogitsLoss().cuda()
     # optimizer
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-4)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=0.1)
@@ -222,8 +225,9 @@ def main():
     test_loader = DataLoader(test_gen, 1, shuffle=False, pin_memory=True, num_workers=4)
 
     # class weight. This is imbalanced data problem, so we will add class weight to loss function
-    weights = cls_wts(name_label_dict, 0.3)[1]
-    class_weights = torch.FloatTensor(weights).cuda()
+    # weights = cls_wts(name_label_dict, 0.3)[1]
+    # class_weights = torch.FloatTensor(weights).cuda()
+    class_weights = None
 
     # get model
     model = get_net()
