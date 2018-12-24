@@ -149,7 +149,11 @@ def main():
     model.cuda()
 
     # criterion
-    optimizer = optim.SGD(model.parameters(),lr = config.lr,momentum=0.9,weight_decay=1e-4)
+    # optimizer = optim.SGD(model.parameters(),lr = config.lr,momentum=0.9,weight_decay=1e-4)
+    optimizer = torch.optim.SGD([
+        {'params': list(model.parameters())[:-1], 'lr': 3e-3, 'momentum': 0.9, 'weight_decay': 1e-4},
+        {'params': list(model.parameters())[-1], 'lr': 1e-2, 'momentum': 0.9, 'weight_decay': 1e-4}
+        ])
     criterion = nn.BCEWithLogitsLoss().cuda()
     #criterion = FocalLoss().cuda()
     #criterion = F1Loss().cuda()
