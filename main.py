@@ -255,9 +255,8 @@ def main():
             # freeze all layers. 
             for param in model.parameters():
                 param.requires_grad = False
-            # enable 2 last layers
+            # enable last layers
             list(model.parameters())[-1].requires_grad = True
-            list(model.parameters())[-2].requires_grad = True
                 
             epochs = config.epochs_ft
             learning_rate = config.lr_ft
