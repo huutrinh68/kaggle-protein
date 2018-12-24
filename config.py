@@ -15,7 +15,7 @@ class DefaultConfigs(object):
     channels = 4
     lr = 1e-03
     lr_ft = 0.02
-    batch_size = 24
+    batch_size = 20
     epochs = 45
     epochs_ft = 2
     seed = 2050
