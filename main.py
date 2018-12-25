@@ -22,6 +22,8 @@ from torch.optim import lr_scheduler
 from sklearn.model_selection import train_test_split
 from timeit import default_timer as timer
 from sklearn.metrics import f1_score
+from sklearn.preprocessing import MultiLabelBinarizer
+import gc 
 # 1. set random seed
 random.seed(2050)
 np.random.seed(2050)
@@ -147,16 +149,9 @@ def main():
     # 4.2 get model
     model = get_net()
     model.cuda()
+    # load old weight trained model
+    model.load_state_dict(torch.load("%s/%s_fold_%s_model_best_loss.pth.tar"%(config.best_models,config.model_name,str(fold)))["state_dict"])
 
-    # criterion
-    # optimizer = optim.SGD(model.parameters(),lr = config.lr,momentum=0.9,weight_decay=1e-4)
-    optimizer = torch.optim.SGD([
-        {'params': list(model.parameters())[:-1], 'lr': 3e-3, 'momentum': 0.9, 'weight_decay': 1e-4},
-        {'params': list(model.parameters())[-1], 'lr': 1e-2, 'momentum': 0.9, 'weight_decay': 1e-4}
-        ])
-    criterion = nn.BCEWithLogitsLoss().cuda()
-    #criterion = FocalLoss().cuda()
-    #criterion = F1Loss().cuda()
     start_epoch = 0
     best_loss = 999
     best_f1 = 0
@@ -168,6 +163,35 @@ def main():
     df1 = pd.read_csv(config.train_kaggle_csv)
     df2 = pd.read_csv(config.train_external_csv)
     all_files = pd.concat([df1, df2])
+    del df1, df2
+    gc.collect()
+
+    # compute class weight
+    target = all_files.apply(lambda x: x['Target'].split(' '), axis=1)
+    y = target.tolist()
+    y = MultiLabelBinarizer().fit_transform(y)
+    labels_dict = dict()
+    count_classes = np.sum(y, axis=0)
+    for i,count in enumerate(count_classes):
+        labels_dict[i] = count
+
+    del target, y
+    gc.collect()
+
+    dampened_cw = create_class_weight(labels_dict)[1]
+    tmp = list(dampened_cw.values())
+    class_weight = torch.FloatTensor(tmp).cuda()
+    
+
+    # criterion
+    # optimizer = optim.SGD(model.parameters(),lr = config.lr,momentum=0.9,weight_decay=1e-4)
+    optimizer = torch.optim.SGD([
+        {'params': list(model.parameters())[:-1], 'lr': 3e-3, 'momentum': 0.9, 'weight_decay': 1e-4},
+        {'params': list(model.parameters())[-1], 'lr': 1e-2, 'momentum': 0.9, 'weight_decay': 1e-4}
+        ])
+    criterion = nn.BCEWithLogitsLoss(weight=class_weight).cuda()
+    #criterion = FocalLoss().cuda()
+    #criterion = F1Loss().cuda()
 
     #print(all_files)
     test_files = pd.read_csv(config.sample_submission)
@@ -185,7 +209,7 @@ def main():
 
     scheduler = lr_scheduler.StepLR(optimizer,step_size=10,gamma=0.1)
     start = timer()
-
+    
     #train
     for epoch in range(0,config.epochs):
         scheduler.step(epoch)
