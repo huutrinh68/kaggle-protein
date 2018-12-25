@@ -9,6 +9,8 @@ from torch import nn
 import torch.nn.functional as F 
 from sklearn.metrics import f1_score
 from torch.autograd import Variable
+import math
+
 # save best model
 def save_checkpoint(state, is_best_loss,is_best_f1,fold):
     filename = config.weights + config.model_name + os.sep +str(fold) + os.sep + "checkpoint.pth.tar"
@@ -112,3 +114,18 @@ def time_to_str(t, mode='min'):
 
     else:
         raise NotImplementedError
+
+
+def create_class_weight(labels_dict, mu=0.5):
+    total = np.sum(list(labels_dict.values()))
+    keys = labels_dict.keys()
+    class_weight = dict()
+    class_weight_log = dict()
+
+    for key in keys:
+        score = total / float(labels_dict[key])
+        score_log = math.log(mu * total / float(labels_dict[key]))
+        class_weight[key] = round(score, 2) if score > 1.0 else round(1.0, 2)
+        class_weight_log[key] = round(score_log, 2) if score_log > 1.0 else round(1.0, 2)
+
+    return class_weight, class_weight_log
