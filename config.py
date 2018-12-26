@@ -15,7 +15,7 @@ class DefaultConfigs(object):
     channels = 4
     lr = 0.0001
     weight_decay = 0.000000001
-    batch_size = 32
+    batch_size = 22
     epochs = 100
 
 config = DefaultConfigs()
