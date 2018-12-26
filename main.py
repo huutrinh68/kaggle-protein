@@ -185,10 +185,11 @@ def main():
 
     # criterion
     # optimizer = optim.SGD(model.parameters(),lr = config.lr,momentum=0.9,weight_decay=1e-4)
-    optimizer = torch.optim.SGD([
-        {'params': list(model.parameters())[:-1], 'lr': 3e-3, 'momentum': 0.9, 'weight_decay': 1e-4},
-        {'params': list(model.parameters())[-1], 'lr': 1e-2, 'momentum': 0.9, 'weight_decay': 1e-4}
-        ])
+    # optimizer = torch.optim.SGD([
+    #     {'params': list(model.parameters())[:-1], 'lr': 3e-3, 'momentum': 0.9, 'weight_decay': 1e-4},
+    #     {'params': list(model.parameters())[-1], 'lr': 1e-2, 'momentum': 0.9, 'weight_decay': 1e-4}
+    #     ])
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     criterion = nn.BCEWithLogitsLoss(weight=class_weight).cuda()
     #criterion = FocalLoss().cuda()
     #criterion = F1Loss().cuda()
@@ -207,7 +208,7 @@ def main():
     test_gen = HumanDataset(test_files,config.test_data,augument=False,mode="test")
     test_loader = DataLoader(test_gen,1,shuffle=False,pin_memory=True,num_workers=4)
 
-    scheduler = lr_scheduler.StepLR(optimizer,step_size=10,gamma=0.1)
+    scheduler = lr_scheduler.StepLR(optimizer,step_size=8,gamma=0.1)
     start = timer()
     
     #train
