@@ -30,7 +30,7 @@ random.seed(2050)
 np.random.seed(2050)
 torch.manual_seed(2050)
 torch.cuda.manual_seed_all(2050)
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.backends.cudnn.benchmark = True
 warnings.filterwarnings('ignore')
 
@@ -157,7 +157,7 @@ def main():
     model = get_net()
     model.cuda()
     # load old weight trained model
-    model.load_state_dict(torch.load("%s/%s_fold_%s_model_best_loss.pth.tar"%(config.best_models,config.model_name,str(fold)))["state_dict"])
+    #model.load_state_dict(torch.load("%s/%s_fold_%s_model_best_loss.pth.tar"%(config.best_models,config.model_name,str(fold)))["state_dict"])
 
     start_epoch = 0
     best_loss = 999
