@@ -1,16 +1,16 @@
-import os 
-import time 
-import json 
-import torch 
-import random 
+import os
+import time
+import json
+import torch
+import random
 import warnings
 import torchvision
-import numpy as np 
-import pandas as pd 
+import numpy as np
+import pandas as pd
 
 from utils import *
 from data import HumanDataset
-from tqdm import tqdm 
+from tqdm import tqdm
 from config import config
 from datetime import datetime
 from models.model import*
@@ -23,15 +23,18 @@ from sklearn.model_selection import train_test_split
 from timeit import default_timer as timer
 from sklearn.metrics import f1_score
 from sklearn.preprocessing import MultiLabelBinarizer
-import gc 
+from tensorboardX import SummaryWriter
+import gc
 # 1. set random seed
 random.seed(2050)
 np.random.seed(2050)
 torch.manual_seed(2050)
 torch.cuda.manual_seed_all(2050)
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.backends.cudnn.benchmark = True
 warnings.filterwarnings('ignore')
+
+writer = SummaryWriter()
 
 if not os.path.exists("./logs/"):
     os.mkdir("./logs/")
@@ -54,7 +57,7 @@ def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,s
         output = model(images)
         loss = criterion(output,target)
         losses.update(loss.item(),images.size(0))
-        
+
         f1_batch = f1_score(target,output.sigmoid().cpu() > 0.15,average='macro')
         f1.update(f1_batch,images.size(0))
         optimizer.zero_grad()
@@ -63,11 +66,14 @@ def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,s
         print('\r',end='',flush=True)
         message = '%s %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
                 "train", i/len(train_loader) + epoch, epoch,
-                losses.avg, f1.avg, 
-                valid_loss[0], valid_loss[1], 
+                losses.avg, f1.avg,
+                valid_loss[0], valid_loss[1],
                 str(best_results[0])[:8],str(best_results[1])[:8],
                 time_to_str((timer() - start),'min'))
         print(message , end='',flush=True)
+        if i % 100 == 0:
+            writer.add_scalar('data/train_loss', losses.avg, i)
+            writer.add_scalar('data/train_f1', f1.avg, i)
     log.write("\n")
     #log.write(message)
     #log.write("\n")
@@ -94,17 +100,18 @@ def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
             f1.update(f1_batch,images_var.size(0))
             print('\r',end='',flush=True)
             message = '%s   %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
-                    "val", i/len(val_loader) + epoch, epoch,                    
-                    train_loss[0], train_loss[1], 
+                    "val", i/len(val_loader) + epoch, epoch,
+                    train_loss[0], train_loss[1],
                     losses.avg, f1.avg,
                     str(best_results[0])[:8],str(best_results[1])[:8],
                     time_to_str((timer() - start),'min'))
-
             print(message, end='',flush=True)
         log.write("\n")
         #log.write(message)
         #log.write("\n")
-        
+
+        writer.add_scalar('data/eval_loss', losses.avg, i)
+        writer.add_scalar('data/eval_f1', f1.avg, i)
     return [losses.avg,f1.avg]
 
 # 3. test model on public dataset and save the probability matrix
@@ -123,7 +130,7 @@ def test(test_loader,model,folds):
             y_pred = model(image_var)
             label = y_pred.sigmoid().cpu().data.numpy()
             #print(label > 0.5)
-           
+
             labels.append(label > 0.15)
             filenames.append(filepath)
 
@@ -145,7 +152,7 @@ def main():
         os.mkdir(config.best_models)
     if not os.path.exists("./logs/"):
         os.mkdir("./logs/")
-    
+
     # 4.2 get model
     model = get_net()
     model.cuda()
@@ -181,7 +188,7 @@ def main():
     dampened_cw = create_class_weight(labels_dict)[1]
     tmp = list(dampened_cw.values())
     class_weight = torch.FloatTensor(tmp).cuda()
-    
+
 
     # criterion
     # optimizer = optim.SGD(model.parameters(),lr = config.lr,momentum=0.9,weight_decay=1e-4)
@@ -210,7 +217,7 @@ def main():
 
     scheduler = lr_scheduler.StepLR(optimizer,step_size=8,gamma=0.1)
     start = timer()
-    
+
     #train
     for epoch in range(0,config.epochs):
         scheduler.step(epoch)
@@ -219,11 +226,11 @@ def main():
         train_metrics = train(train_loader,model,criterion,optimizer,epoch,val_metrics,best_results,start)
         # val
         val_metrics = evaluate(val_loader,model,criterion,epoch,train_metrics,best_results,start)
-        # check results 
+        # check results
         is_best_loss = val_metrics[0] < best_results[0]
         best_results[0] = min(val_metrics[0],best_results[0])
         is_best_f1 = val_metrics[1] > best_results[1]
-        best_results[1] = max(val_metrics[1],best_results[1])   
+        best_results[1] = max(val_metrics[1],best_results[1])
         # save model
         save_checkpoint({
                     "epoch":epoch + 1,
@@ -237,15 +244,15 @@ def main():
         # print logs
         print('\r',end='',flush=True)
         log.write('%s  %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
-                "best", epoch, epoch,                    
-                train_metrics[0], train_metrics[1], 
+                "best", epoch, epoch,
+                train_metrics[0], train_metrics[1],
                 val_metrics[0], val_metrics[1],
                 str(best_results[0])[:8],str(best_results[1])[:8],
                 time_to_str((timer() - start),'min'))
             )
         log.write("\n")
         time.sleep(0.01)
-    
+
     best_model = torch.load("%s/%s_fold_%s_model_best_loss.pth.tar"%(config.best_models,config.model_name,str(fold)))
     #best_model = torch.load("checkpoints/bninception_bcelog/0/checkpoint.pth.tar")
     model.load_state_dict(best_model["state_dict"])
