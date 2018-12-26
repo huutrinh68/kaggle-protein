@@ -170,7 +170,23 @@ def main():
     df1 = pd.read_csv(config.train_kaggle_csv)
     df2 = pd.read_csv(config.train_external_csv)
     all_files = pd.concat([df1, df2])
-    del df1, df2
+
+    # create duplicate for low data
+    # https://www.kaggle.com/c/human-protein-atlas-image-classification/discussion/74374#437548
+    train_df_orig = all_files.copy()    
+    lows = [15,15,15,8,9,10,8,9,10,8,9,10,17,20,24,26,15,27,15,20,24,17,8,15,27,27,27]
+    for i in lows:
+        target = str(i)
+        indicies = train_df_orig.loc[train_df_orig['Target'] == target].index
+        all_files = pd.concat([all_files, train_df_orig.loc[indicies]], ignore_index=True)
+        indicies = train_df_orig.loc[train_df_orig['Target'].str.startswith(target+" ")].index
+        all_files = pd.concat([all_files, train_df_orig.loc[indicies]], ignore_index=True)
+        indicies = train_df_orig.loc[train_df_orig['Target'].str.endswith(" "+target)].index
+        all_files = pd.concat([all_files, train_df_orig.loc[indicies]], ignore_index=True)
+        indicies = train_df_orig.loc[train_df_orig['Target'].str.contains(" "+target+" ")].index
+        all_files = pd.concat([all_files, train_df_orig.loc[indicies]], ignore_index=True)
+
+    del df1, df2, train_df_orig
     gc.collect()
 
     # compute class weight
@@ -188,7 +204,6 @@ def main():
     dampened_cw = create_class_weight(labels_dict)[1]
     tmp = list(dampened_cw.values())
     class_weight = torch.FloatTensor(tmp).cuda()
-
 
     # criterion
     # optimizer = optim.SGD(model.parameters(),lr = config.lr,momentum=0.9,weight_decay=1e-4)
