@@ -16,5 +16,6 @@ class DefaultConfigs(object):
     epochs = 100
     epochs_ft = 2
     seed = 2050
+    kfold = 5
 
 config = DefaultConfigs()
