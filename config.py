@@ -8,7 +8,7 @@ class DefaultConfigs(object):
     weights = "./checkpoints/"
     best_models = "./checkpoints/best_models/"
     submit = "./submit/"
-    model_name = "resnet50_bcelog"
+    model_name = "resnet34_bcelog"
     num_classes = 28
     img_weight = 512
     img_height = 512
