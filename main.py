@@ -94,7 +94,7 @@ def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
             output = model(images_var)
             loss = criterion(output,target)
             losses.update(loss.item(), images_var.size(0))
-            f1_batch = f1_score(target, output.sigmoid().cpu().data.numpy() > config.thresold,average='macro')
+            f1_batch = f1_score(target, output.sigmoid().cpu().data.numpy() > config.thresold, average='macro')
             f1.update(f1_batch, images_var.size(0))
             print('\r',end='',flush=True)
             message = '%s   %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
