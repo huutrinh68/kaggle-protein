@@ -19,7 +19,8 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from timeit import default_timer as timer
 from sklearn.metrics import f1_score
-
+from edafa import ClassPredictor
+from torchvision import transforms as T
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.backends.cudnn.benchmark = True
