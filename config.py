@@ -17,5 +17,6 @@ class DefaultConfigs(object):
     weight_decay = 0.000000001
     batch_size = 22
     epochs = 100
+    thresold = 0.2
 
 config = DefaultConfigs()
