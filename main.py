@@ -58,7 +58,7 @@ def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,s
         loss = criterion(output,target)
         losses.update(loss.item(),images.size(0))
 
-        f1_batch = f1_score(target,output.sigmoid().cpu() > 0.15,average='macro')
+        f1_batch = f1_score(target,output.sigmoid().cpu() > config.thresold, average='macro')
         f1.update(f1_batch,images.size(0))
         optimizer.zero_grad()
         loss.backward()
