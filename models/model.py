@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import torch
 
 def get_net():
-    model = models.resnet50(pretrained=True)
+    model = models.resnet34(pretrained=True)
     # get the pre-trained weights
     # pretrained_weights = list(model.parameters())
     
