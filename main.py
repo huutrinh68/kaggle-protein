@@ -133,7 +133,7 @@ def test(test_loader, model, folds):
         subrow = ' '.join(list([str(i) for i in np.nonzero(row)[0]]))
         submissions.append(subrow)
     sample_submission_df['Predicted'] = submissions
-    sample_submission_df.to_csv('./submit/{}_bestloss_submission.csv'.format(config.model_name, index=None))
+    sample_submission_df.to_csv('./submit/{}_bestloss_submission.csv'.format(config.model_name), index=None)
 
 # 4. main function
 def main():
@@ -220,7 +220,7 @@ def main():
 
     scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
     start = timer()
-
+    """
     #train
     for epoch in range(0,config.epochs):
         scheduler.step(epoch)
@@ -255,8 +255,8 @@ def main():
             )
         log.write("\n")
         time.sleep(0.01)
-
-    best_model = torch.load("{}/{}_fold_{}_model_best_loss.pth.tar".format(config.best_models,config.model_name,str(fold)))
+    """
+    best_model = torch.load("{}/{}_fold_{}_model_best_loss.pth.tar".format(config.best_models, config.model_name, str(fold)))
     #best_model = torch.load("checkpoints/bninception_bcelog/0/checkpoint.pth.tar")
     model.load_state_dict(best_model["state_dict"])
     test(test_loader, model, fold)

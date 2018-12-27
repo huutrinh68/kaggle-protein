@@ -49,7 +49,7 @@ def test(test_loader, model, folds):
         subrow = ' '.join(list([str(i) for i in np.nonzero(row)[0]]))
         submissions.append(subrow)
     sample_submission_df['Predicted'] = submissions
-    sample_submission_df.to_csv('./submit/{}_bestloss_submission.csv'.format(config.model_name, index=None))
+    sample_submission_df.to_csv('./submit/{}_bestloss_submission.csv'.format(config.model_name), index=None)
 
 # 2. main function
 def main():
