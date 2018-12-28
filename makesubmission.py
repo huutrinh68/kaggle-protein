@@ -52,6 +52,7 @@ def augumentor(self,image):
     return image_aug
 
 # 1. test model on public dataset and save the probability matrix
+n_tta = 1
 def test(test_loader, model, folds):
     sample_submission_df = pd.read_csv(config.sample_submission)
     #1.1 confirm the model converted to cuda
@@ -63,7 +64,7 @@ def test(test_loader, model, folds):
         #1.2 change everything to cuda and get only basename
         filepath = [os.path.basename(x) for x in filepath]
         probs = []
-        for k in range(config.n_tta):
+        for k in range(n_tta):
             with torch.no_grad():
                 image_var = input.cuda(non_blocking=True)
                 y_pred = model(image_var)
@@ -72,12 +73,12 @@ def test(test_loader, model, folds):
         probs_agg = np.vstack(probs).mean(axis = 0)
         preds = probs_agg > config.thresold
         if len(preds) == 0: preds = [np.argmax(probs_agg)]
-        labels.append(preds)
-        filenames.append(filepath)
 
-    for row in np.concatenate(labels):
-        subrow = ' '.join(list([str(i) for i in np.nonzero(row)[0]]))
+        subrow = ' '.join(list([str(i) for i in np.nonzero(preds)[0]]))
+        if len(subrow) == 0:
+            subrow = np.argmax(probs_agg)
         submissions.append(subrow)
+
     sample_submission_df['Predicted'] = submissions
     sample_submission_df.to_csv('./submit/{}_bestloss_submission.csv'.format(config.model_name), index=None)
 
