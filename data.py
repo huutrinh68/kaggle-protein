@@ -49,7 +49,7 @@ class HumanDataset(Dataset):
             X = self.preprocess(X)
             return X ,y
         else:
-            Xs = [self.preprocess(self.augumentor(X)) for i in range(self.tta)]
+            Xs = [self.preprocess(X)] + [self.preprocess(self.augumentor(X)) for i in range(self.tta)]
             return Xs, y
 
     def read_images(self,index):
