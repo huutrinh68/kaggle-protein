@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms as T
 from sklearn.preprocessing import MultiLabelBinarizer
 from imgaug import augmenters as iaa
-import random 
+import random
 import pathlib
 
 # set random seed
@@ -38,8 +38,10 @@ class HumanDataset(Dataset):
             y = str(self.images_df.iloc[index].Id.absolute())
         if self.augument:
             X = self.augumentor(X)
-        #X = T.Compose([T.ToPILImage(),T.ToTensor(),T.Normalize([0.08069, 0.05258, 0.05487, 0.08282], [0.13704, 0.10145, 0.15313, 0.13814])])(X)
-        X = T.Compose([T.ToPILImage(),T.ToTensor()])(X)
+        # X = T.Compose([T.ToPILImage(),T.ToTensor(),T.Normalize([0.08069, 0.05258, 0.05487, 0.08282], [0.13704, 0.10145, 0.15313, 0.13814])])(X)
+        X = T.Compose([T.ToPILImage(),
+                       T.ToTensor(),
+                       T.Normalize(mean=[0.5,], std=[0.5,])])(X)
         return X.float(),y
 
 
@@ -55,7 +57,7 @@ class HumanDataset(Dataset):
         g = np.array(Image.open(filename+"_green.jpg")) 
         b = np.array(Image.open(filename+"_blue.jpg")) 
         y = np.array(Image.open(filename+"_yellow.jpg")) 
-        images[:,:,0] = r.astype(np.uint8) 
+        images[:,:,0] = r.astype(np.uint8)
         images[:,:,1] = g.astype(np.uint8)
         images[:,:,2] = b.astype(np.uint8)
         if config.channels == 4:
