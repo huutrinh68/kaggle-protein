@@ -26,34 +26,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.backends.cudnn.benchmark = True
 warnings.filterwarnings('ignore')
 
-# make a augmentation function for tta
-# this is identical with data.augumentor
-def augumentor(self,image):
-    augment_img = iaa.Sequential([
-        iaa.OneOf([
-            iaa.Noop(),
-            iaa.Affine(rotate=90),
-            iaa.Affine(rotate=180),
-            iaa.Affine(rotate=270)]),
-        iaa.OneOf([
-            iaa.Noop(),
-            iaa.Fliplr(0.5),
-            iaa.Flipud(0.5)]),
-        iaa.OneOf([
-            iaa.Noop(),
-            iaa.PiecewiseAffine(scale=(0.01, 0.05))
-        ]),
-        iaa.OneOf([
-            iaa.Noop(),
-            iaa.Affine(shear=(-10, 10))
-        ])], random_order=True)
-
-    image_aug = augment_img.augment_image(image)
-    return image_aug
-
 # 1. test model on public dataset and save the probability matrix
-n_tta = 1
+n_tta = 4
 def test(test_loader, model, folds):
+    print(n_tta)
     sample_submission_df = pd.read_csv(config.sample_submission)
     #1.1 confirm the model converted to cuda
     filenames, labels, submissions= [], [], []
@@ -96,7 +72,7 @@ def main():
     #print(all_files)
     test_files = pd.read_csv(config.sample_submission)
 
-    test_gen = HumanDataset(test_files, config.test_data, augument=False, mode="test")
+    test_gen = HumanDataset(test_files, config.test_data, augument=True, mode="test")
     test_loader = DataLoader(test_gen, 1, shuffle=False, pin_memory=True, num_workers=4)
 
     best_model = torch.load("{}/{}_fold_{}_model_best_loss.pth.tar".format(config.best_models,config.model_name,str(fold)))

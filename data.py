@@ -72,14 +72,22 @@ class HumanDataset(Dataset):
     def augumentor(self,image):
         augment_img = iaa.Sequential([
             iaa.OneOf([
+                iaa.Noop(),
                 iaa.Affine(rotate=90),
                 iaa.Affine(rotate=180),
-                iaa.Affine(rotate=270),
-                iaa.Affine(shear=(-16, 16)),
+                iaa.Affine(rotate=270)]),
+            iaa.OneOf([
+                iaa.Noop(),
                 iaa.Fliplr(0.5),
-                iaa.Flipud(0.5),
-                
+                iaa.Flipud(0.5)]),
+            iaa.OneOf([
+                iaa.Noop(),
+                iaa.PiecewiseAffine(scale=(0.01, 0.03))
+            ]),
+            iaa.OneOf([
+                iaa.Noop(),
+                iaa.Affine(shear=(-5, 5))
             ])], random_order=True)
-        
+
         image_aug = augment_img.augment_image(image)
         return image_aug
