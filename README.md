@@ -1,5 +1,9 @@
 # kaggle_human_protein_baseline
+
 Human Protein Atlas Image Classification baseline
+
+Human Protein Atlas Image Classification baseline:0.456
+
 # 1. requirements
 
 `pytorch-0.4.0` `pretrainedmodels-0.7.4` `imgaug`

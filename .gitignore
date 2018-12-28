@@ -119,3 +119,9 @@ checkpoints
 logs
 submit
 20181216
+mnist
+runs
+all_scalars.json
+nano.save
+test.py
+trained_model
