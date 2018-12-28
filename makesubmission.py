@@ -22,10 +22,34 @@ from sklearn.metrics import f1_score
 from edafa import ClassPredictor
 from torchvision import transforms as T
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.backends.cudnn.benchmark = True
 warnings.filterwarnings('ignore')
 
+# make a augmentation function for tta
+# this is identical with data.augumentor
+def augumentor(self,image):
+    augment_img = iaa.Sequential([
+        iaa.OneOf([
+            iaa.Noop(),
+            iaa.Affine(rotate=90),
+            iaa.Affine(rotate=180),
+            iaa.Affine(rotate=270)]),
+        iaa.OneOf([
+            iaa.Noop(),
+            iaa.Fliplr(0.5),
+            iaa.Flipud(0.5)]),
+        iaa.OneOf([
+            iaa.Noop(),
+            iaa.PiecewiseAffine(scale=(0.01, 0.05))
+        ]),
+        iaa.OneOf([
+            iaa.Noop(),
+            iaa.Affine(shear=(-10, 10))
+        ])], random_order=True)
+
+    image_aug = augment_img.augment_image(image)
+    return image_aug
 
 # 1. test model on public dataset and save the probability matrix
 def test(test_loader, model, folds):
@@ -38,13 +62,18 @@ def test(test_loader, model, folds):
     for i, (input, filepath) in enumerate(tqdm(test_loader)):
         #1.2 change everything to cuda and get only basename
         filepath = [os.path.basename(x) for x in filepath]
-        with torch.no_grad():
-            image_var = input.cuda(non_blocking=True)
-            y_pred = model(image_var)
-            label = y_pred.sigmoid().cpu().data.numpy()
-
-            labels.append(label > config.thresold)
-            filenames.append(filepath)
+        probs = []
+        for k in range(config.n_tta):
+            with torch.no_grad():
+                image_var = input.cuda(non_blocking=True)
+                y_pred = model(image_var)
+                prob = y_pred.sigmoid().cpu().data.numpy()
+                probs.append(prob)
+        probs_agg = np.vstack(probs).mean(axis = 0)
+        preds = probs_agg > config.thresold
+        if len(preds) == 0: preds = [np.argmax(probs_agg)]
+        labels.append(preds)
+        filenames.append(filepath)
 
     for row in np.concatenate(labels):
         subrow = ' '.join(list([str(i) for i in np.nonzero(row)[0]]))
