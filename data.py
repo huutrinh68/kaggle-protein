@@ -16,7 +16,7 @@ torch.cuda.manual_seed_all(2050)
 
 # create dataset class
 class HumanDataset(Dataset):
-    def __init__(self,images_df,base_path,augument=True,mode="train"):
+    def __init__(self,images_df,base_path,augument=True,mode="train",tta=None):
         if not isinstance(base_path, pathlib.Path):
             base_path = pathlib.Path(base_path)
         self.images_df = images_df.copy()
@@ -25,9 +25,15 @@ class HumanDataset(Dataset):
         self.mlb = MultiLabelBinarizer(classes = np.arange(0,config.num_classes))
         self.mlb.fit(np.arange(0,config.num_classes))
         self.mode = mode
+        self.tta = tta
 
     def __len__(self):
         return len(self.images_df)
+
+    def preprocess(self,X):
+        return T.Compose([T.ToPILImage(),
+                          T.ToTensor(),
+                          T.Normalize(mean=[0.5,], std=[0.5,])])(X).float()
 
     def __getitem__(self,index):
         X = self.read_images(index)
@@ -36,14 +42,15 @@ class HumanDataset(Dataset):
             y  = np.eye(config.num_classes,dtype=np.float)[labels].sum(axis=0)
         else:
             y = str(self.images_df.iloc[index].Id.absolute())
-        if self.augument:
-            X = self.augumentor(X)
-        # X = T.Compose([T.ToPILImage(),T.ToTensor(),T.Normalize([0.08069, 0.05258, 0.05487, 0.08282], [0.13704, 0.10145, 0.15313, 0.13814])])(X)
-        X = T.Compose([T.ToPILImage(),
-                       T.ToTensor(),
-                       T.Normalize(mean=[0.5,], std=[0.5,])])(X)
-        return X.float(),y
-
+        if self.tta == None:
+            if self.augument:
+                X = self.augumentor(X)
+            # X = T.Compose([T.ToPILImage(),T.ToTensor(),T.Normalize([0.08069, 0.05258, 0.05487, 0.08282], [0.13704, 0.10145, 0.15313, 0.13814])])(X)
+            X = self.preprocess(X)
+            return X ,y
+        else:
+            Xs = [self.preprocess(self.augumentor(X)) for i in range(self.tta)]
+            return Xs, y
 
     def read_images(self,index):
         row = self.images_df.iloc[index]
