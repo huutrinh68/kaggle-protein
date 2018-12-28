@@ -18,5 +18,6 @@ class DefaultConfigs(object):
     batch_size = 48
     epochs = 20
     thresold = 0.2
+    n_tta = 3
 
 config = DefaultConfigs()

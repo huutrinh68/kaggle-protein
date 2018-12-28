@@ -22,7 +22,7 @@ from sklearn.metrics import f1_score
 from edafa import ClassPredictor
 from torchvision import transforms as T
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.backends.cudnn.benchmark = True
 warnings.filterwarnings('ignore')
 
