@@ -23,6 +23,8 @@ from sklearn.model_selection import train_test_split
 from timeit import default_timer as timer
 from sklearn.metrics import f1_score
 from sklearn.preprocessing import MultiLabelBinarizer
+from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
+
 from tensorboardX import SummaryWriter
 import gc
 # 1. set random seed
@@ -30,7 +32,7 @@ random.seed(2050)
 np.random.seed(2050)
 torch.manual_seed(2050)
 torch.cuda.manual_seed_all(2050)
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 torch.backends.cudnn.benchmark = True
 warnings.filterwarnings('ignore')
 
@@ -46,7 +48,9 @@ log.write('                           |------------ Train -------------|--------
 log.write('mode     iter     epoch    |         loss   f1_macro        |         loss   f1_macro       |         loss   f1_macro       | time       |\n')
 log.write('-------------------------------------------------------------------------------------------------------------------------------\n')
 
+batch_global_counter = 0
 def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,start):
+    global batch_global_counter
     losses = AverageMeter()
     f1 = AverageMeter()
     model.train()
@@ -71,9 +75,13 @@ def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,s
                 str(best_results[0])[:8],str(best_results[1])[:8],
                 time_to_str((timer() - start),'min'))
         print(message , end='',flush=True)
-        if i % 100 == 0:
-            writer.add_scalar('data/train_loss', losses.avg, i)
-            writer.add_scalar('data/train_f1', f1.avg, i)
+
+        # Tensorboard
+        if i % 10 == 9:
+            writer.add_scalar('data/train_loss', loss, batch_global_counter)
+            writer.add_scalar('data/train_f1', f1_batch, batch_global_counter)
+            batch_global_counter += 1
+
     log.write("\n")
     return [losses.avg,f1.avg]
 
@@ -106,34 +114,9 @@ def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
             print(message, end='',flush=True)
         log.write("\n")
 
-        writer.add_scalar('data/eval_loss', losses.avg, i)
-        writer.add_scalar('data/eval_f1', f1.avg, i)
+        writer.add_scalar('data/eval_loss', losses.avg, epoch)
+        writer.add_scalar('data/eval_f1', f1.avg, epoch)
     return [losses.avg, f1.avg]
-
-# 3. test model on public dataset and save the probability matrix
-def test(test_loader, model, folds):
-    sample_submission_df = pd.read_csv(config.sample_submission)
-    #3.1 confirm the model converted to cuda
-    filenames, labels, submissions= [], [], []
-    model.cuda()
-    model.eval()
-    submit_results = []
-    for i, (input, filepath) in enumerate(tqdm(test_loader)):
-        #3.2 change everything to cuda and get only basename
-        filepath = [os.path.basename(x) for x in filepath]
-        with torch.no_grad():
-            image_var = input.cuda(non_blocking=True)
-            y_pred = model(image_var)
-            label = y_pred.sigmoid().cpu().data.numpy()
-
-            labels.append(label > config.thresold)
-            filenames.append(filepath)
-
-    for row in np.concatenate(labels):
-        subrow = ' '.join(list([str(i) for i in np.nonzero(row)[0]]))
-        submissions.append(subrow)
-    sample_submission_df['Predicted'] = submissions
-    sample_submission_df.to_csv('./submit/{}_bestloss_submission.csv'.format(config.model_name), index=None)
 
 # 4. main function
 def main():
@@ -165,27 +148,40 @@ def main():
     df1 = pd.read_csv(config.train_kaggle_csv)
     df2 = pd.read_csv(config.train_external_csv)
     all_files = pd.concat([df1, df2])
+    test_files = pd.read_csv(config.sample_submission)
+
+    # Stratified train test split
+    labels = [np.array(list(map(int, str_label.split(' '))))
+              for str_label in all_files.Target]
+    y  = [np.eye(config.num_classes,dtype=np.float)[label].sum(axis=0)
+          for label in labels]
+    msss = MultilabelStratifiedShuffleSplit(n_splits=1, test_size=0.13, random_state=2050)
+    for train_index, val_index in msss.split(all_files, y): # Only run one time
+        train_data_index, val_data_index = train_index, val_index
+    train_data_list = all_files.iloc[train_data_index].reset_index()
+    val_data_list = all_files.iloc[val_data_index].reset_index()
+    # train_data_list, val_data_list = train_test_split(all_files, test_size = 0.13, random_state = 2050)
 
     # create duplicate for low data
     # https://www.kaggle.com/c/human-protein-atlas-image-classification/discussion/74374#437548
-    train_df_orig = all_files.copy()    
+    train_df_orig = train_data_list.copy()
     lows = [15,15,15,8,9,10,8,9,10,8,9,10,17,20,24,26,15,27,15,20,24,17,8,15,27,27,27]
     for i in lows:
         target = str(i)
         indicies = train_df_orig.loc[train_df_orig['Target'] == target].index
-        all_files = pd.concat([all_files, train_df_orig.loc[indicies]], ignore_index=True)
+        train_data_list = pd.concat([train_data_list, train_df_orig.loc[indicies]], ignore_index=True)
         indicies = train_df_orig.loc[train_df_orig['Target'].str.startswith(target+" ")].index
-        all_files = pd.concat([all_files, train_df_orig.loc[indicies]], ignore_index=True)
+        train_data_list = pd.concat([train_data_list, train_df_orig.loc[indicies]], ignore_index=True)
         indicies = train_df_orig.loc[train_df_orig['Target'].str.endswith(" "+target)].index
-        all_files = pd.concat([all_files, train_df_orig.loc[indicies]], ignore_index=True)
+        train_data_list = pd.concat([train_data_list, train_df_orig.loc[indicies]], ignore_index=True)
         indicies = train_df_orig.loc[train_df_orig['Target'].str.contains(" "+target+" ")].index
-        all_files = pd.concat([all_files, train_df_orig.loc[indicies]], ignore_index=True)
+        train_data_list = pd.concat([train_data_list, train_df_orig.loc[indicies]], ignore_index=True)
 
     del df1, df2, train_df_orig
     gc.collect()
 
     # compute class weight
-    target = all_files.apply(lambda x: x['Target'].split(' '), axis=1)
+    target = train_data_list.apply(lambda x: x['Target'].split(' '), axis=1)
     y = target.tolist()
     y = MultiLabelBinarizer().fit_transform(y)
     labels_dict = dict()
@@ -204,10 +200,6 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     criterion = nn.BCEWithLogitsLoss(weight=class_weight).cuda()
 
-    #print(all_files)
-    test_files = pd.read_csv(config.sample_submission)
-    train_data_list,val_data_list = train_test_split(all_files, test_size = 0.13, random_state = 2050)
-
     # load dataset
     train_gen = HumanDataset(train_data_list, config.train_data, mode="train")
     train_loader = DataLoader(train_gen, batch_size=config.batch_size, shuffle=True, pin_memory=True, num_workers=4)
@@ -215,12 +207,9 @@ def main():
     val_gen = HumanDataset(val_data_list, config.train_data, augument=False, mode="train")
     val_loader = DataLoader(val_gen, batch_size=config.batch_size, shuffle=False, pin_memory=True, num_workers=4)
 
-    test_gen = HumanDataset(test_files, config.test_data, augument=False, mode="test")
-    test_loader = DataLoader(test_gen, 1, shuffle=False, pin_memory=True, num_workers=4)
-
     scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
     start = timer()
-    
+
     #train
     for epoch in range(0,config.epochs):
         scheduler.step(epoch)
@@ -255,10 +244,10 @@ def main():
             )
         log.write("\n")
         time.sleep(0.01)
-    
+
     best_model = torch.load("{}/{}_fold_{}_model_best_loss.pth.tar".format(config.best_models, config.model_name, str(fold)))
     #best_model = torch.load("checkpoints/bninception_bcelog/0/checkpoint.pth.tar")
     model.load_state_dict(best_model["state_dict"])
-    test(test_loader, model, fold)
+
 if __name__ == "__main__":
     main()
