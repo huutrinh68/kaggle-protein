@@ -183,7 +183,7 @@ def main():
     # compute class weight
     target = train_data_list.apply(lambda x: x['Target'].split(' '), axis=1)
     y = target.tolist()
-    list_oder = [str(i) for i in range(28)]
+    list_order = [str(i) for i in range(28)]
     mlb = MultiLabelBinarizer(list_order)
     y = mlb.fit_transform(y)
     labels_dict = dict()
