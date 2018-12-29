@@ -49,7 +49,7 @@ class HumanDataset(Dataset):
             X = self.preprocess(X)
             return X ,y
         else:
-            Xs = [self.preprocess(X)] + [self.preprocess(self.augumentor(X)) for i in range(self.tta)]
+            Xs = [self.preprocess(aug_image) for aug_image in self.fixed_augumentors(X)]
             return Xs, y
 
     def read_images(self,index):
@@ -75,6 +75,14 @@ class HumanDataset(Dataset):
             return images
         else:
             return cv2.resize(images,(config.img_weight,config.img_height))
+
+    def fixed_augumentors(self,image):
+        actions = [iaa.Noop(),
+                   iaa.Fliplr(1),
+                   iaa.Flipud(1),
+                   iaa.Affine(rotate=90),
+                   iaa.Affine(rotate=-90)]
+        return [action.augment_image(image) for action in actions[:self.tta]]
 
     def augumentor(self,image):
         augment_img = iaa.Sequential([
