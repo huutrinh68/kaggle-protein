@@ -82,12 +82,13 @@ def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,s
         print(message , end='',flush=True)
 
         # Tensorboard
-        if i % 50 == 9:
+        if i % 50 == 49:
             f1_scores = cal_f1_scores(cfs_mats)
-            writer.add_scalar('data/train_loss', loss, batch_global_counter)
-            writer.add_scalar('data/train_f1', macro_f1, batch_global_counter)
+            f1_scores_dict = {'class_'+str(i):f1_scores[i] for i in range(config.num_classes)}
+            writer.add_scalar(config.model_name + '/data/train_loss', loss, batch_global_counter)
+            writer.add_scalar(config.model_name + '/data/train_f1', macro_f1, batch_global_counter)
+            writer.add_scalars(config.model_name + '/data/class_train_f1', f1_scores_dict, batch_global_counter)
             batch_global_counter += 1
-        if i > 100: break
 
     log.write("\n")
     return [losses.avg, macro_f1]
@@ -129,8 +130,8 @@ def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
             print(message, end='',flush=True)
         log.write("\n")
 
-        writer.add_scalar('data/eval_loss', losses.avg, epoch)
-        writer.add_scalar('data/eval_f1', macro_f1, epoch)
+        writer.add_scalar(config.model_name + '/data/eval_loss', losses.avg, epoch)
+        writer.add_scalar(config.model_name + '/data/eval_f1', macro_f1, epoch)
     return [losses.avg, macro_f1]
 
 # 4. main function
