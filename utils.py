@@ -115,7 +115,6 @@ def time_to_str(t, mode='min'):
     else:
         raise NotImplementedError
 
-
 def create_class_weight(labels_dict, mu=0.5):
     total = np.sum(list(labels_dict.values()))
     keys = labels_dict.keys()
@@ -129,3 +128,13 @@ def create_class_weight(labels_dict, mu=0.5):
         class_weight_log[key] = round(score_log, 2) if score_log > 1.0 else round(1.0, 2)
 
     return class_weight, class_weight_log
+
+def cal_f1_scores(cfs_mats):
+    f1_scores = []
+    for cfs_mat in cfs_mats:
+        (tn, fp, fn, tp) = cfs_mat
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
+        f1 = 2 * (precision * recall) / (precision + recall)
+        f1_scores.append(f1)
+    return f1_scores
