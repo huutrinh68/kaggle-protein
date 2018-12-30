@@ -21,7 +21,7 @@ from torch.utils.data import DataLoader
 from torch.optim import lr_scheduler
 from sklearn.model_selection import train_test_split
 from timeit import default_timer as timer
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, confusion_matrix
 from sklearn.preprocessing import MultiLabelBinarizer
 from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit, MultilabelStratifiedKFold
 
@@ -52,7 +52,8 @@ batch_global_counter = 0
 def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,start):
     global batch_global_counter
     losses = AverageMeter()
-    f1 = AverageMeter()
+    cfs_mats = [np.zeros(4) for i in range(config.num_classes)] # confusion matrix for each class
+    macro_f1 = None
     model.train()
     for i,(images,target) in enumerate(train_loader):
         images = images.cuda(non_blocking=True)
@@ -62,34 +63,42 @@ def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,s
         loss = criterion(output,target)
         losses.update(loss.item(),images.size(0))
 
-        f1_batch = f1_score(target,output.sigmoid().cpu() > config.thresold, average='macro')
-        f1.update(f1_batch,images.size(0))
+        # update tn, fp, fn, tp
+        preds = output.sigmoid().cpu() > config.thresold
+        cfs_mats = [cfs_mats[i] + confusion_matrix(target[:, i], preds[:, i]).ravel()
+                    for i in range(config.num_classes)]
+        f1_scores = cal_f1_scores(cfs_mats)
+        macro_f1 = np.nanmean(f1_scores)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         print('\r',end='',flush=True)
         message = '%s %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
                 "train", i/len(train_loader) + epoch, epoch,
-                losses.avg, f1.avg,
+                losses.avg, macro_f1,
                 valid_loss[0], valid_loss[1],
                 str(best_results[0])[:8],str(best_results[1])[:8],
                 time_to_str((timer() - start),'min'))
         print(message , end='',flush=True)
 
         # Tensorboard
-        if i % 10 == 9:
-            writer.add_scalar('data/train_loss', loss, batch_global_counter)
-            writer.add_scalar('data/train_f1', f1_batch, batch_global_counter)
+        if i % 50 == 49:
+            f1_scores = cal_f1_scores(cfs_mats)
+            f1_scores_dict = {'class_'+str(i):f1_scores[i] for i in range(config.num_classes)}
+            writer.add_scalar(config.model_name + '/data/train_loss', loss, batch_global_counter)
+            writer.add_scalar(config.model_name + '/data/train_f1', macro_f1, batch_global_counter)
+            writer.add_scalars(config.model_name + '/data/class_train_f1', f1_scores_dict, batch_global_counter)
             batch_global_counter += 1
 
     log.write("\n")
-    return [losses.avg,f1.avg]
+    return [losses.avg, macro_f1]
 
-# 2. evaluate fuunction
+# 2. evaluate function
 def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
     # only meter loss and f1 score
     losses = AverageMeter()
-    f1 = AverageMeter()
+    cfs_mats = [np.zeros(4) for i in range(config.num_classes)] # confusion matrix for each class
+    macro_f1 = None
     # switch mode for evaluation
     model.cuda()
     model.eval()
@@ -102,21 +111,28 @@ def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
             output = model(images_var)
             loss = criterion(output,target)
             losses.update(loss.item(), images_var.size(0))
-            f1_batch = f1_score(target, output.sigmoid().cpu().data.numpy() > config.thresold, average='macro')
-            f1.update(f1_batch, images_var.size(0))
+
+            # update tn, fp, fn, tp
+            preds = output.sigmoid().cpu() > config.thresold
+            cfs_mats = [cfs_mats[i] + confusion_matrix(target[:, i], preds[:, i]).ravel()
+                        for i in range(config.num_classes)]
+            f1_scores = cal_f1_scores(cfs_mats)
+            macro_f1 = np.nanmean(f1_scores)
+
+            # print
             print('\r',end='',flush=True)
             message = '%s   %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\
                     "val", i/len(val_loader) + epoch, epoch,
                     train_loss[0], train_loss[1],
-                    losses.avg, f1.avg,
+                    losses.avg, macro_f1,
                     str(best_results[0])[:8], str(best_results[1])[:8],
                     time_to_str((timer() - start),'min'))
             print(message, end='',flush=True)
         log.write("\n")
 
-        writer.add_scalar('data/eval_loss', losses.avg, epoch)
-        writer.add_scalar('data/eval_f1', f1.avg, epoch)
-    return [losses.avg, f1.avg]
+        writer.add_scalar(config.model_name + '/data/eval_loss', losses.avg, epoch)
+        writer.add_scalar(config.model_name + '/data/eval_f1', macro_f1, epoch)
+    return [losses.avg, macro_f1]
 
 # 4. main function
 def main():
