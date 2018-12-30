@@ -17,7 +17,7 @@ class DefaultConfigs(object):
     lr = 0.0001
     weight_decay = 0.000000001
     batch_size = 56
-    epochs = 13
+    epochs = 18
     thresold = 0.2
     n_tta = 3
     n_fold = 5

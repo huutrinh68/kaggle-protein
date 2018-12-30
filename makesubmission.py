@@ -62,7 +62,7 @@ def main():
 
     # 2.2 get model
     model = get_net()
-    #model.cuda()
+    model.cuda()
 
     #print(all_files)
     test_files = pd.read_csv(config.sample_submission)

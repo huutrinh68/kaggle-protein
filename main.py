@@ -27,11 +27,12 @@ from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit, Multilabe
 
 from tensorboardX import SummaryWriter
 import gc
-# 1. set random seed
-random.seed(2050)
-np.random.seed(2050)
-torch.manual_seed(2050)
-torch.cuda.manual_seed_all(2050)
+
+# set random seed
+random.seed(config.seed)
+np.random.seed(config.seed)
+torch.manual_seed(config.seed)
+torch.cuda.manual_seed_all(config.seed)
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 torch.backends.cudnn.benchmark = True
 warnings.filterwarnings('ignore')
@@ -93,7 +94,7 @@ def train(train_loader,model,criterion,optimizer,epoch,valid_loss,best_results,s
     log.write("\n")
     return [losses.avg, macro_f1]
 
-# 2. evaluate function
+# evaluate function
 def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
     # only meter loss and f1 score
     losses = AverageMeter()
@@ -134,31 +135,31 @@ def evaluate(val_loader,model,criterion,epoch,train_loss,best_results,start):
         writer.add_scalar(config.model_name + '/data/eval_f1', macro_f1, epoch)
     return [losses.avg, macro_f1]
 
-# 4. main function
+# main function
 def main():
-    fold = 0
-    # 4.1 mkdirs
-    if not os.path.exists(config.submit):
-        os.makedirs(config.submit)
-    if not os.path.exists(config.weights + config.model_name + os.sep +str(fold)):
-        os.makedirs(config.weights + config.model_name + os.sep +str(fold))
+    n_fold = config.n_fold
+    # mkdirs folder
+    for fold in range(config.n_fold):
+        fold_path = config.weights + config.model_name + os.sep + str(fold)
+        if not os.path.exists(fold_path):
+            os.makedirs(fold_path)
     if not os.path.exists(config.best_models):
         os.mkdir(config.best_models)
     if not os.path.exists("./logs/"):
         os.mkdir("./logs/")
+    if not os.path.exists(config.submit):
+        os.makedirs(config.submit)
+    
+    start = timer()
 
-    # 4.2 get model
-    model = get_net()
-    model.cuda()
-    # load old weight trained model
-    model.load_state_dict(torch.load("{}/{}_fold_{}_model_best_loss.pth.tar".format(config.best_models,config.model_name,str(fold)))["state_dict"])
-
+    # initial
     start_epoch = 0
     best_loss = 999
     best_f1 = 0
     best_results = [np.inf, 0]
     val_metrics = [np.inf, 0]
     resume = False
+
     # get train
     # train data, this data include external data
     df1 = pd.read_csv(config.train_kaggle_csv)
@@ -173,13 +174,18 @@ def main():
               for str_label in all_files.Target]
     y  = [np.eye(config.num_classes,dtype=np.float)[label].sum(axis=0)
           for label in labels]
-    # msss = MultilabelStratifiedShuffleSplit(n_splits=1, test_size=0.13, random_state=2050) #=> This function is just split data, not kfold
-    mskf = MultilabelStratifiedKFold(n_splits=config.n_fold, shuffle=True, random_state=config.seed) #=> This function is split data into k fold equally
-    for fold, (train_index, val_index) in enumerate(mskf.split(all_files, y)): # Only run one time
+    mskf = MultilabelStratifiedKFold(n_splits=config.n_fold, shuffle=True, random_state=config.seed)
+
+    # train with kfold
+    preds = []
+    for fold, (train_index, val_index) in enumerate(mskf.split(all_files, y)):
+        # get model
+        model = get_net()
+        model.cuda()
+        
         train_data_index, val_data_index = train_index, val_index
         train_data_list = all_files.iloc[train_data_index].reset_index()
         val_data_list = all_files.iloc[val_data_index].reset_index()
-        # train_data_list, val_data_list = train_test_split(all_files, test_size = 0.13, random_state = 2050)
 
         # create duplicate for low data
         # https://www.kaggle.com/c/human-protein-atlas-image-classification/discussion/74374#437548
@@ -210,29 +216,33 @@ def main():
         for i,count in enumerate(count_classes):
             labels_dict[i] = count
 
-        del target, y
-        gc.collect()
-
         dampened_cw = create_class_weight(labels_dict)[1]
         tmp = list(dampened_cw.values())
         class_weight = torch.FloatTensor(tmp).cuda()
+
+        del target, y
+        gc.collect()
 
         # criterion
         optimizer = torch.optim.Adam(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
         criterion = nn.BCEWithLogitsLoss(weight=class_weight).cuda()
 
-        # load dataset
+        # load train dataset
         train_gen = HumanDataset(train_data_list, config.train_data, mode="train")
         train_loader = DataLoader(train_gen, batch_size=config.batch_size, shuffle=True, pin_memory=True, num_workers=4)
 
+        # load valid dataset
         val_gen = HumanDataset(val_data_list, config.train_data, augument=False, mode="train")
         val_loader = DataLoader(val_gen, batch_size=config.batch_size, shuffle=False, pin_memory=True, num_workers=4)
 
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
-        start = timer()
+        # load test dataset
+        test_gen = HumanDataset(test_files, config.test_data, augument=False, mode="test", tta=config.n_tta)
+        test_loader = DataLoader(test_gen, 1, shuffle=False, pin_memory=True, num_workers=4)
 
-        #train
-        for epoch in range(0,config.epochs):
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.1)
+
+        # train and valid
+        for epoch in range(0, config.epochs):
             scheduler.step(epoch)
             # train
             lr = get_learning_rate(optimizer)
@@ -266,9 +276,48 @@ def main():
             log.write("\n")
             time.sleep(0.01)
 
-    # best_model = torch.load("{}/{}_fold_{}_model_best_loss.pth.tar".format(config.best_models, config.model_name, str(fold)))
-    # #best_model = torch.load("checkpoints/bninception_bcelog/0/checkpoint.pth.tar")
-    # model.load_state_dict(best_model["state_dict"])
+        # test with public dataset
+        preds.append(test(test_loader, model, fold))
+    
+    # compute test predict over all fold
+    test_pred = np.mean(preds, axis=0)
+
+    # make submit file
+    makesubmission(test_pred, test_loader)
+
+
+def test(test_loader, model, fold):
+    # evaluation model
+    model.eval()
+
+    test_pred = []
+    for i, (inputs, _) in enumerate(tqdm(test_loader)):
+        probs = []
+        for input in inputs:
+            with torch.no_grad():
+                image_var = input.cuda(non_blocking=True)
+                y_pred = model(image_var)
+                prob = y_pred.sigmoid().cpu().data.numpy()
+                probs.append(prob)
+        test_pred.append(np.vstack(probs).mean(axis=0))
+
+    return test_pred
+
+def makesubmission(test_pred, test_loader):
+    sample_submission_df = pd.read_csv(config.sample_submission).iloc[:5]
+    submissions= []
+    pred = test_pred > config.thresold
+    if len(pred) == 0: pred = [np.argmax(pred, axis=1)]
+
+    for i, (_, _) in enumerate(tqdm(test_loader)):
+        subrow = ' '.join(list([str(i) for i in np.nonzero(pred)[0]]))
+        if len(subrow) == 0:
+            subrow = np.argmax(test_pred)
+        submissions.append(subrow)
+    
+    sample_submission_df['Predicted'] = submissions
+    sample_submission_df.to_csv('./submit/{}_bestloss_submission.csv'.format(config.model_name), index=None)
+
 
 if __name__ == "__main__":
     main()
