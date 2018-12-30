@@ -27,7 +27,7 @@ torch.backends.cudnn.benchmark = True
 warnings.filterwarnings('ignore')
 
 # 1. test model on public dataset and save the probability matrix
-def test(test_loader, model, folds):
+def test(test_loader, model, folds, ill_pairs):
     sample_submission_df = pd.read_csv(config.sample_submission)
     #1.1 confirm the model converted to cuda
     filenames, labels, submissions= [], [], []
@@ -46,8 +46,9 @@ def test(test_loader, model, folds):
         probs_agg = np.vstack(probs).mean(axis = 0)
         preds = probs_agg > config.thresold
         if len(preds) == 0: preds = [np.argmax(probs_agg)]
-
-        subrow = ' '.join(list([str(i) for i in np.nonzero(preds)[0]]))
+        preds = np.nonzero(preds)[0]
+        preds = remove_ill_pairs(ill_pairs, preds, probs_agg)
+        subrow = ' '.join(list([str(i) for i in preds]))
         if len(subrow) == 0:
             subrow = np.argmax(probs_agg)
         submissions.append(subrow)
@@ -75,7 +76,9 @@ def main():
     best_model = torch.load("{}/{}_fold_{}_model_best_loss.pth.tar".format(config.best_models,config.model_name,str(fold)))
     #best_model = torch.load("checkpoints/bninception_bcelog/0/checkpoint.pth.tar")
     model.load_state_dict(best_model["state_dict"])
-    test(test_loader, model, fold)
+
+    ill_pairs = get_ill_pairs()
+    test(test_loader, model, fold, ill_pairs)
 
 if __name__ == "__main__":
     main()

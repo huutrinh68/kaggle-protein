@@ -166,3 +166,12 @@ def get_ill_pairs(threshold = 0):
             if i !=k and co_occur_mat[i,k] <= threshold:
                 ill_pairs.append((i,k))
     return ill_pairs
+
+def remove_ill_pairs(ill_pairs, preds, probs):
+    preds = sorted(preds, key=lambda x : probs[x], reverse=True)
+    final_preds = [preds[0]]
+    for new_pred in preds[1:]:
+        checking_pairs = [(new_pred, old_pred) for old_pred in final_preds]
+        if set(checking_pairs) & set(final_preds): continue
+        else: final_preds.append(new_pred)
+    return final_preds
