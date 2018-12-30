@@ -3,7 +3,9 @@ import sys
 import json
 import torch
 import shutil
-import numpy as np 
+import numpy as np
+import pandas as pd
+
 from config import config
 from torch import nn
 import torch.nn.functional as F 
@@ -138,3 +140,29 @@ def cal_f1_scores(cfs_mats):
         f1 = 2 * (precision * recall) / (precision + recall)
         f1_scores.append(f1)
     return f1_scores
+
+def calc_co_occur_mat(fpath):
+    df = pd.read_csv(fpath)
+    if 'Target' in df.columns:
+        target_col = 'Target'
+    else: target_col = 'Predicted'
+    labels = [np.array(list(map(int, str_label.split(' '))))
+                  for str_label in df[target_col]]
+    co_occur_mat = np.zeros((config.num_classes, config.num_classes))
+    for label in labels:
+        for i in label:
+            for k in label:
+                if i != k: co_occur_mat[i, k] += 1
+    #co_occur_mat /= np.sum(co_occur_mat, axis=0)
+    return co_occur_mat
+
+def get_ill_pairs(threshold = 0):
+    co_occur_kaggle = calc_co_occur_mat(config.train_kaggle_csv)
+    co_occur_external = calc_co_occur_mat(config.train_external_csv)
+    co_occur_mat = co_occur_external + co_occur_kaggle
+    ill_pairs = []
+    for i in range(config.num_classes):
+        for k in range(config.num_classes):
+            if i !=k and co_occur_mat[i,k] <= threshold:
+                ill_pairs.append((i,k))
+    return ill_pairs
