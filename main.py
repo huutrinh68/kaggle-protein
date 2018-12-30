@@ -304,7 +304,7 @@ def test(test_loader, model, fold):
     return test_pred
 
 def makesubmission(test_pred, test_loader):
-    sample_submission_df = pd.read_csv(config.sample_submission).iloc[:5]
+    sample_submission_df = pd.read_csv(config.sample_submission)
     submissions= []
     pred = test_pred > config.thresold
     if len(pred) == 0: pred = [np.argmax(pred, axis=1)]
