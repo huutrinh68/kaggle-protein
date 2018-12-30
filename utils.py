@@ -175,3 +175,9 @@ def remove_ill_pairs(ill_pairs, preds, probs):
         if set(checking_pairs) & set(final_preds): continue
         else: final_preds.append(new_pred)
     return final_preds
+
+def main():
+    print(get_ill_pairs())
+
+if __name__ == main():
+    main()

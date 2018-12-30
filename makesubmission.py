@@ -45,8 +45,9 @@ def test(test_loader, model, folds, ill_pairs):
                 probs.append(prob)
         probs_agg = np.vstack(probs).mean(axis = 0)
         preds = probs_agg > config.thresold
-        if len(preds) == 0: preds = [np.argmax(probs_agg)]
         preds = np.nonzero(preds)[0]
+        if len(preds) == 0:
+            preds = [np.argmax(probs_agg)]
         preds = remove_ill_pairs(ill_pairs, preds, probs_agg)
         subrow = ' '.join(list([str(i) for i in preds]))
         if len(subrow) == 0:
