@@ -19,7 +19,6 @@ from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from timeit import default_timer as timer
 from sklearn.metrics import f1_score
-from edafa import ClassPredictor
 from torchvision import transforms as T
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -31,7 +30,6 @@ def test(test_loader, model, folds):
     sample_submission_df = pd.read_csv(config.sample_submission)
     #1.1 confirm the model converted to cuda
     filenames, labels, submissions= [], [], []
-    model.cuda()
     model.eval()
     submit_results = []
     for i, (inputs, _) in enumerate(tqdm(test_loader)):
@@ -64,7 +62,7 @@ def main():
 
     # 2.2 get model
     model = get_net()
-    model.cuda()
+    #model.cuda()
 
     #print(all_files)
     test_files = pd.read_csv(config.sample_submission)
@@ -73,6 +71,7 @@ def main():
     test_loader = DataLoader(test_gen, 1, shuffle=False, pin_memory=True, num_workers=4)
 
     best_model = torch.load("{}/{}_fold_{}_model_best_loss.pth.tar".format(config.best_models,config.model_name,str(fold)))
+    #best_model = torch.load("/home/trinhnh1/Dropbox/kaggle/human_protein_atlas_image_classification/trained_model/resnet34_538/resnet50_bcelog_fold_0_model_best_loss.pth.tar")
     #best_model = torch.load("checkpoints/bninception_bcelog/0/checkpoint.pth.tar")
     model.load_state_dict(best_model["state_dict"])
     test(test_loader, model, fold)
