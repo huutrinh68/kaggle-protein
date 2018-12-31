@@ -152,14 +152,6 @@ def main():
     
     start = timer()
 
-    # initial
-    start_epoch = 0
-    best_loss = 999
-    best_f1 = 0
-    best_results = [np.inf, 0]
-    val_metrics = [np.inf, 0]
-    resume = False
-
     # get train
     # train data, this data include external data
     df1 = pd.read_csv(config.train_kaggle_csv)
@@ -179,6 +171,14 @@ def main():
     # train with kfold
     preds = []
     for fold, (train_index, val_index) in enumerate(mskf.split(all_files, y)):
+        # initial
+        start_epoch = 0
+        best_loss = 999
+        best_f1 = 0
+        best_results = [np.inf, 0]
+        val_metrics = [np.inf, 0]
+        resume = False
+
         # get model
         model = get_net()
         model.cuda()
@@ -263,7 +263,7 @@ def main():
                         "optimizer":optimizer.state_dict(),
                         "fold":fold,
                         "best_f1":best_results[1],
-            }, is_best_loss, is_best_f1, fold)
+            }, is_best_loss, is_best_f1, fold, epoch)
             # print logs
             print('\r',end='', flush=True)
             log.write('%s  %5.1f %6.1f         |         %0.3f  %0.3f           |         %0.3f  %0.4f         |         %s  %s    | %s' % (\

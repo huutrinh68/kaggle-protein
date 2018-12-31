@@ -3,7 +3,9 @@ import sys
 import json
 import torch
 import shutil
-import numpy as np 
+import numpy as np
+import pandas as pd
+
 from config import config
 from torch import nn
 import torch.nn.functional as F 
@@ -12,8 +14,8 @@ from torch.autograd import Variable
 import math
 
 # save best model
-def save_checkpoint(state, is_best_loss,is_best_f1,fold,epoch):
-    filename = config.weights + config.model_name + os.sep +str(fold) + os.sep + str(epoch) + "_checkpoint.pth.tar"
+def save_checkpoint(state, is_best_loss,is_best_f1,fold):
+    filename = config.weights + config.model_name + os.sep +str(fold) + os.sep + "checkpoint.pth.tar"
     torch.save(state, filename)
     if is_best_loss:
         shutil.copyfile(filename,"%s/%s_fold_%s_model_best_loss.pth.tar"%(config.best_models,config.model_name,str(fold)))
@@ -138,3 +140,44 @@ def cal_f1_scores(cfs_mats):
         f1 = 2 * (precision * recall) / (precision + recall)
         f1_scores.append(f1)
     return f1_scores
+
+def calc_co_occur_mat(fpath):
+    df = pd.read_csv(fpath)
+    if 'Target' in df.columns:
+        target_col = 'Target'
+    else: target_col = 'Predicted'
+    labels = [np.array(list(map(int, str_label.split(' '))))
+                  for str_label in df[target_col]]
+    co_occur_mat = np.zeros((config.num_classes, config.num_classes))
+    for label in labels:
+        for i in label:
+            for k in label:
+                if i != k: co_occur_mat[i, k] += 1
+    #co_occur_mat /= np.sum(co_occur_mat, axis=0)
+    return co_occur_mat
+
+def get_ill_pairs(threshold = 0):
+    co_occur_kaggle = calc_co_occur_mat(config.train_kaggle_csv)
+    co_occur_external = calc_co_occur_mat(config.train_external_csv)
+    co_occur_mat = co_occur_external + co_occur_kaggle
+    ill_pairs = []
+    for i in range(config.num_classes):
+        for k in range(config.num_classes):
+            if i !=k and co_occur_mat[i,k] <= threshold:
+                ill_pairs.append((i,k))
+    return ill_pairs
+
+def remove_ill_pairs(ill_pairs, preds, probs):
+    preds = sorted(preds, key=lambda x : probs[x], reverse=True)
+    final_preds = [preds[0]]
+    for new_pred in preds[1:]:
+        checking_pairs = [(new_pred, old_pred) for old_pred in final_preds]
+        if set(checking_pairs) & set(final_preds): continue
+        else: final_preds.append(new_pred)
+    return final_preds
+
+def main():
+    print(get_ill_pairs())
+
+if __name__ == main():
+    main()
