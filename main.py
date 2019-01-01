@@ -183,6 +183,10 @@ def main():
         model = get_net()
         model.cuda()
         
+        # load weight
+        #best_model = torch.load("{}/{}_fold_{}_model_best_loss.pth.tar".format(config.best_models,config.model_name,str(fold)))
+        #model.load_state_dict(best_model["state_dict"])
+        
         train_data_index, val_data_index = train_index, val_index
         train_data_list = all_files.iloc[train_data_index].reset_index()
         val_data_list = all_files.iloc[val_data_index].reset_index()
@@ -303,21 +307,20 @@ def test(test_loader, model, fold):
 
     return test_pred
 
+
 def makesubmission(test_pred, test_loader):
+    print('Aggregating predictions')
     sample_submission_df = pd.read_csv(config.sample_submission)
-    submissions= []
-    pred = test_pred > config.thresold
-    if len(pred) == 0: pred = [np.argmax(pred, axis=1)]
+    submissions = []
 
     for i, (_, _) in enumerate(tqdm(test_loader)):
-        subrow = ' '.join(list([str(i) for i in np.nonzero(pred)[0]]))
-        if len(subrow) == 0:
-            subrow = np.argmax(test_pred)
+        pred = np.where(test_pred[i, :].ravel() > config.thresold)[0]
+        if len(pred) == 0: pred = [np.argmax(test_pred[i, :].ravel())]
+        subrow = ' '.join(list([str(i) for i in pred]))
         submissions.append(subrow)
-    
+
     sample_submission_df['Predicted'] = submissions
     sample_submission_df.to_csv('./submit/{}_bestloss_submission.csv'.format(config.model_name), index=None)
-
 
 if __name__ == "__main__":
     main()
