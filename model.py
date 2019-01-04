@@ -7,9 +7,11 @@ from sacred import Ingredient
 from data import data_ingredient
 model_ingredient = Ingredient('model', ingredients=[data_ingredient])
 
+
 @model_ingredient.config
 def cfg():
     model = 'resnet18' # resnet18 / resnet34 / bninception / seres50, default: bninception
+
 
 @model_ingredient.capture
 def load_model(model, data):
@@ -19,6 +21,7 @@ def load_model(model, data):
     if model == 'resnet18': return _get_net_resnet18(n_channels, n_classes)
     if model == 'seres50' : return _get_net_seres50(n_channels, n_classes)
     else: return _get_net_bninception(n_channels, n_classes)
+
 
 # =======================
 # get_net functions
@@ -34,6 +37,7 @@ def _get_net_bninception(n_channels, n_classes):
                                       nn.Linear(1024, n_classes))
     return _model
 
+
 def _get_net_resnet34(n_channels, n_classes):
     _model = models.resnet34(pretrained='imagenet')
     _model.conv1 = nn.Conv2d(n_channels, 64, kernel_size=(7, 7),
@@ -43,6 +47,7 @@ def _get_net_resnet34(n_channels, n_classes):
     _model.fc = nn.Linear(num_ftrs, n_classes)
     return _model
 
+
 def _get_net_resnet18(n_channels, n_classes):
     _model = models.resnet18(pretrained='imagenet')
     _model.conv1 = nn.Conv2d(n_channels, 64, kernel_size=(7, 7),
@@ -51,6 +56,7 @@ def _get_net_resnet18(n_channels, n_classes):
     num_ftrs = _model.fc.in_features
     _model.fc = nn.Linear(num_ftrs, n_classes)
     return _model
+
 
 def _get_net_seres50(n_channels, n_classes):
     _model = pretrainedmodels.models.se_resnet50(pretrained='imagenet')

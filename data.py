@@ -28,6 +28,7 @@ iaa_dict = {'rot90' : iaa.Affine(rotate=90),
             'fliplr': iaa.Fliplr(1),
             'noop'  : iaa.Noop()}
 
+
 @data_ingredient.config
 def cfg():
     image_size = 512            # image size
@@ -43,12 +44,14 @@ def cfg():
                   'flipud', 'fliplr']                             # train aug actions
     aug_tta    = ['noop', 'flipup', 'fliplr', 'rot90', 'rot-90']  # tta aug actions
 
+
 @data_ingredient.capture
 def load_gen(data_df, mode, path):
     if mode in ['train', 'val']:
         return CellDataset(data_df, path['root'] + path['train_data'], mode='train')
     if mode == 'test':
         return CellDataset(data_df, path['root'] + path['test_data'], mode='test')
+
 
 @data_ingredient.capture
 def load_loader(dataset, mode, batch_size, n_workers):
@@ -61,6 +64,7 @@ def load_loader(dataset, mode, batch_size, n_workers):
     if mode == 'test':
         return DataLoader(dataset, batch_size = 1, shuffle=False,
                           pin_memory=True, num_workers=n_workers)
+
 
 @data_ingredient.capture
 def create_loader(fold, n_fold, seed, debug, path, n_classes, upsampling):
@@ -87,6 +91,7 @@ def create_loader(fold, n_fold, seed, debug, path, n_classes, upsampling):
 
     return train_loader, val_loader, labels_count
 
+
 @data_ingredient.capture
 def up_sampling(train_data_df, upsampling):
     # Upsampling
@@ -107,6 +112,7 @@ def up_sampling(train_data_df, upsampling):
         gc.collect()
 
     return train_data_df
+
 
 def count_labels(train_data_df):
     target = train_data_df.apply(lambda x: x['Target'].split(' '), axis=1)

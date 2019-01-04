@@ -16,7 +16,7 @@ from optimizer import optimizer_ingredient, load_optimizer
 from criterion import criterion_ingredient, load_loss, cal_f1_scores
 from model import model_ingredient, load_model
 from data import data_ingredient, create_loader
-from path import path_ingredient
+from path import path_ingredient, prepair_dir
 
 ex = Experiment('Sample', ingredients=[model_ingredient,      # model
                                        optimizer_ingredient,  # optimizer
@@ -33,11 +33,14 @@ def cfg():
     threshold = 0.2
     resume = True
     debug = False
+    if debug == True:
+        max_epochs = 3
+
 
 @ex.capture
 def init(_run, seed, path):
-    ex.observers.append(FileStorageObserver.create(path['root'] + 'exp_logs/experiments'))
-
+    prepair_dir()
+    ex.observers.append(FileStorageObserver.create(path['root'] + path['exp_logs'] + 'experiments/'))
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -53,9 +56,11 @@ def init(_run, seed, path):
 
     return device
 
+
 @ex.capture
 def after_init(trainer):
     trainer.cache = dict()
+
 
 @ex.main
 def main(_log, max_epochs, resume, model, optimizer, data, path, seed, debug, criterion):
@@ -72,7 +77,7 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, debug, cr
                                                               debug=debug)
         loss_func = load_loss(label_count)
         trainer = Trainer(
-            alchemistic_directory = path['root'] + 'exp_logs/checkpoints',
+            alchemistic_directory = path['root'] + path['exp_logs'] + 'checkpoints/',
             code = get_dir_name(),
             fold=fold,
             model=model,
@@ -96,6 +101,7 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, debug, cr
         except Exception as e:
             _log.error('Unexpected exception! %s', e)
 
+
 @ex.capture
 def before_epoch_start(trainer, data):
     trainer.cache['train_cfs_mats']  = [np.zeros(4) for i in range(data['n_classes'])]
@@ -104,6 +110,7 @@ def before_epoch_start(trainer, data):
     trainer.cache['val_cfs_mats']    = [np.zeros(4) for i in range(data['n_classes'])]
     trainer.cache['val_f1_scores']   = None
     trainer.cache['val_macro_f1']    = 0
+
 
 @ex.capture
 def after_train_iteration_end(trainer, data, threshold):
@@ -117,6 +124,7 @@ def after_train_iteration_end(trainer, data, threshold):
     trainer.cache['train_f1_scores'] = cal_f1_scores(cfs_mats)
     trainer.cache['train_macro_f1']  = np.nanmean(f1_scores)
 
+
 @ex.capture
 def after_val_iteration_end(trainer, data, threshold):
     preds = trainer.cache['output'].sigmoid().cpu() > threshold
@@ -129,6 +137,7 @@ def after_val_iteration_end(trainer, data, threshold):
     trainer.cache['val_f1_scores'] = cal_f1_scores(cfs_mats)
     trainer.cache['val_macro_f1']  = np.nanmean(f1_scores)
 
+
 @ex.capture
 def after_epoch_end(trainer, _run):
     _run.log_scalar(trainer.fold + "_train_loss",
@@ -140,6 +149,7 @@ def after_epoch_end(trainer, _run):
     _run.log_scalar(trainer.fold + "_val_macro_f1",
                     trainer.cache['val_macro_f1'])
 
+
 @ex.capture
 def get_dir_name(model, optimizer, data, path, criterion, seed):
     name = model['model']
@@ -148,6 +158,7 @@ def get_dir_name(model, optimizer, data, path, criterion, seed):
     name += '_' + str(seed)
     print('Experiment code:', name)
     return name
+
 
 if __name__ == '__main__':
     ex.run_commandline()

@@ -11,16 +11,19 @@ import torch.nn.functional as F
 from sacred import Ingredient
 criterion_ingredient = Ingredient('criterion')
 
+
 @criterion_ingredient.config
 def cfg():
     loss   = 'logbce' #
     weight = 'log'    # log / linear / none (default: log)
+
 
 @criterion_ingredient.capture
 def load_loss(label_count, loss):
     weight = get_weight(label_count)
     if loss == 'focal': return focal_loss
     else: return nn.BCEWithLogitsLoss(weight=weight).cuda()
+
 
 @criterion_ingredient.capture
 def get_weight(label_count, weight, mu=0.5):
@@ -46,6 +49,7 @@ def get_weight(label_count, weight, mu=0.5):
 
     return torch.FloatTensor(list(class_weight.values())).cuda()
 
+
 # =========================
 def cal_f1_scores(cfs_mats):
     f1_scores = []
@@ -56,6 +60,7 @@ def cal_f1_scores(cfs_mats):
         f1 = 2 * (precision * recall) / (precision + recall)
         f1_scores.append(f1)
     return f1_scores
+
 
 def focal_loss(output, target, alpha=0.25, gamma=2):
     x, p, t = output, output.sigmoid(), target
