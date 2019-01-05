@@ -4,6 +4,7 @@ import warnings
 import os
 import numpy as np
 import pandas as pd
+
 from skeleton.trainer import Trainer
 from sacred import Experiment
 from sacred.observers import MongoObserver, FileStorageObserver
@@ -12,7 +13,7 @@ from sacred.commands import print_config
 
 # local import
 from optimizer import optimizer_ingredient, load_optimizer
-from criterion import criterion_ingredient, load_loss, update_macro_f1
+from criterion import criterion_ingredient, load_loss, f1_macro_aggregator
 from model import model_ingredient, load_model
 from data import data_ingredient, create_loader
 from path import path_ingredient, prepair_dir
@@ -23,8 +24,8 @@ ex = Experiment('Sample', ingredients=[model_ingredient,      # model
                                        path_ingredient,       # path
                                        criterion_ingredient]) # criterion
 ex.observers.append(MongoObserver.create(db_name='human_protein'))
+ex.observers.append(FileStorageObserver.create('exp_logs/experiments'))
 ex.captured_out_filter = apply_backspaces_and_linefeeds
-
 
 @ex.config
 def cfg():
@@ -40,7 +41,6 @@ def cfg():
 @ex.capture
 def init(_run, seed, path):
     prepair_dir()
-    ex.observers.append(FileStorageObserver.create(path['root'] + path['exp_logs'] + 'experiments/'))
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -57,13 +57,8 @@ def init(_run, seed, path):
     return device
 
 
-@ex.capture
-def after_init(trainer):
-    trainer.cache = dict()
-
-
 @ex.main
-def main(_log, max_epochs, resume, model, optimizer, data, path, seed, debug, criterion):
+def main(_log, max_epochs, resume, model, optimizer, data, path, seed, threshold, debug, criterion):
     device = init()
     for fold in range(data['n_fold']):
         if torch.cuda.device_count() > 1:
@@ -87,12 +82,9 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, debug, cr
             loss_func=loss_func,
             max_epochs=max_epochs,
             resume=resume,
-            hooks={'after_init': after_init,
-                   'after_train_iteration_end': after_train_iteration_end,
-                   'after_val_iteration_end': after_val_iteration_end,
-                   'before_epoch_start': before_epoch_start,
-                   'after_epoch_end': after_epoch_end},
-            additional_metrics = {'macro_f1'}
+            hooks = {'after_load_checkpoint': after_load_checkpoint,
+                     'after_epoch_end': after_epoch_end},
+            metrics = [('macro_f1', f1_macro_aggregator(threshold, data['n_classes']))]
         )
 
         if debug:
@@ -105,43 +97,17 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, debug, cr
 
 
 @ex.capture
-def before_epoch_start(trainer, data):
-    trainer.cache['train_cfs_mats']  = [np.zeros(4) for i in range(data['n_classes'])]
-    trainer.cache['train_f1_scores'] = None
-    trainer.cache['train_macro_f1']  = 0
-    trainer.cache['val_cfs_mats']    = [np.zeros(4) for i in range(data['n_classes'])]
-    trainer.cache['val_f1_scores']   = None
-    trainer.cache['val_macro_f1']    = 0
-
-@ex.capture
-def after_train_iteration_end(trainer, data, threshold):
-    cfs_mats, f1_scores = update_macro_f1(trainer.cache['output'], trainer.cache['target'],
-                                          trainer.cache['train_cfs_mats'], threshold, data['n_classes'])
-    trainer.cache['train_cfs_mats']  = cfs_mats
-    trainer.cache['train_f1_scores'] = f1_scores
-    trainer.cache['train_macro_f1']  = np.nanmean(f1_scores)
-
-
-@ex.capture
-def after_val_iteration_end(trainer, data, threshold):
-    cfs_mats, f1_scores = update_macro_f1(trainer.cache['output'], trainer.cache['target'],
-                                          trainer.cache['val_cfs_mats'], threshold, data['n_classes'])
-    trainer.cache['val_cfs_mats']  = cfs_mats
-    trainer.cache['val_f1_scores'] = f1_scores
-    trainer.cache['val_macro_f1']  = np.nanmean(f1_scores)
-
-
-@ex.capture
 def after_epoch_end(trainer, _run):
-    _run.log_scalar(trainer.fold + "_train_loss",
-                    trainer.cache['train_loss'].item())
-    _run.log_scalar(trainer.fold + "_train_macro_f1",
-                    trainer.cache['train_macro_f1'])
-    _run.log_scalar(trainer.fold + "_val_loss",
-                    trainer.cache['val_loss'].item())
-    _run.log_scalar(trainer.fold + "_val_macro_f1",
-                    trainer.cache['val_macro_f1'])
+    for metric in trainer.metrics:
+        _run.log_scalar('{}_train_{}'.format(trainer.fold, metric), trainer.cache[metric]['train'][-1])
+        _run.log_scalar('{}_val_{}'.format(trainer.fold, metric), trainer.cache[metric]['val'][-1])
 
+@ex.capture
+def after_load_checkpoint(trainer, _run):
+    for metric in trainer.cache:
+        for tmp in ['train', 'val']:
+            for value in trainer.cache[metric][tmp]:
+                _run.log_scalar('{}_{}_{}'.format(trainer.fold, tmp, metric), value)
 
 @ex.capture
 def get_dir_name(model, optimizer, data, path, criterion, seed, comment):

@@ -1,12 +1,15 @@
 import numpy as np
+import pandas as pd
 import logging
 import torch
 import os
 import time
+import copy
 
 from pathlib import Path
 from tqdm import tqdm
 from . import drawers
+from collections import OrderedDict
 
 class Trainer(object):
     """The heart of minetorch
@@ -55,7 +58,7 @@ class Trainer(object):
     def __init__(self, alchemistic_directory, model, optimizer, loss_func,
                  code="geass", train_dataloader=None, val_dataloader=None,
                  resume=True, eval_stride=1, persist_stride=1, fold=0,
-                 drawer=None, hooks={}, max_epochs=None, additional_metrics=dict(),
+                 drawer=None, hooks={}, max_epochs=None, metrics=[],
                  logging_format=None):
         self.alchemistic_directory = alchemistic_directory
         self.code = code
@@ -75,7 +78,6 @@ class Trainer(object):
         self.val_dataloader = val_dataloader
 
         self.loss_func = loss_func
-        self.additional_metrics = additional_metrics
         self.resume = resume
         self.eval_stride = eval_stride
         self.persist_stride = persist_stride
@@ -85,6 +87,13 @@ class Trainer(object):
         self.current_epoch = 0
         self.hook_funcs = hooks
         self.max_epochs = max_epochs
+
+        self.metrics = [('loss', mean_aggregator(self.loss_func))] + metrics
+        self.metrics = OrderedDict((metric, {'train': copy.deepcopy(aggregator),
+                                             'val': copy.deepcopy(aggregator)})
+                                   for metric, aggregator in self.metrics)
+        self.cache = OrderedDict((metric, {'train': [],'val': []})
+                                 for metric in self.metrics)
 
         self.init_model()
         self.call_hook_func('after_init')
@@ -141,6 +150,7 @@ class Trainer(object):
             self.current_epoch = checkpoint['epoch']
             self.lowest_train_loss = checkpoint['lowest_train_loss']
             self.lowest_val_loss = checkpoint['lowest_val_loss']
+            self.cache = checkpoint['cache']
 
             try:
                 self.model.load_state_dict(checkpoint['state_dict'], strict=True)
@@ -155,6 +165,7 @@ class Trainer(object):
             if (self.drawer is not None) and ('drawer_state' in checkpoint):
                 self.drawer.set_state(checkpoint['drawer_state'])
             logging.info('Checkpoint loaded')
+            self.call_hook_func('after_load_checkpoint')
 
     def call_hook_func(self, name):
         if name not in self.hook_funcs:
@@ -165,6 +176,11 @@ class Trainer(object):
         """start to train the model
         """
         while True:
+            if self.max_epochs is not None and self.current_epoch >= self.max_epochs:
+                self.call_hook_func('before_quit')
+                logging.info('exceed max epochs, quit!\n')
+                break
+
             self.call_hook_func('before_epoch_start')
             self.current_epoch += 1
 
@@ -182,12 +198,11 @@ class Trainer(object):
                 # Loss
                 batch_loss = self.run_train_iteration(index, data, train_iters, loader)
                 total_train_loss += batch_loss
-                metrics_str = 'train_loss: {:.5f} val_loss: {:.5f} '.format(total_train_loss / (index+1), val_loss)
-                self.cache['train_loss'] = total_train_loss / (index+1)
-                for metric in self.additional_metrics:
-                    metrics_str += '| train_{}: {:.5f} val_{}: {:.5f} '.format(metric, self.cache['train_' + metric],
-                                                                            metric, self.cache['val_' + metric])
-
+                metrics_str = ''
+                for metric in self.metrics:
+                    metrics_str += ' |'
+                    metrics_str += ' train_{}: {:.5f}'.format(metric, self.metrics[metric]['train'].mean())
+                    metrics_str += ' val_{}: {:.5f}'.format(metric, self.metrics[metric]['val'].mean())
 
                 loader.set_postfix_str(metrics_str)
                 if index == len(loader)-1:
@@ -203,13 +218,18 @@ class Trainer(object):
                                 total_val_loss += self.run_val_iteration(index, data, val_iters)
                         val_loss = total_val_loss / val_iters
 
-                    metrics_str = 'train_loss: {:.5f} val_loss: {:.5f} '.format(train_loss, val_loss)
-                    self.cache['val_loss'] = val_loss
-                    for metric in self.additional_metrics:
-                        metrics_str += '| train_{}: {:.5f} val_{}: {:.5f}'.format(metric, self.cache['train_' + metric],
-                                                                                metric, self.cache['val_' + metric])
+                    metrics_str = ''
+                    for metric in self.metrics:
+                        metrics_str += ' |'
+                        metrics_str += ' train_{}: {:.5f}'.format(metric, self.metrics[metric]['train'].mean())
+                        metrics_str += ' val_{}: {:.5f}'.format(metric, self.metrics[metric]['val'].mean())
+
                     loader.set_postfix_str(metrics_str)
                     logging.debug(metrics_str)
+
+            for metric in self.metrics:
+                self.cache[metric]['train'].append(self.metrics[metric]['train'].mean())
+                self.cache[metric]['val'].append(self.metrics[metric]['val'].mean())
 
             if self.drawer is not None:
                 self.drawer.scalars(
@@ -234,11 +254,6 @@ class Trainer(object):
 
             self.call_hook_func('after_epoch_end')
 
-            if self.max_epochs is not None and self.current_epoch >= self.max_epochs:
-                self.call_hook_func('before_quit')
-                logging.info('exceed max epochs, quit!\n')
-                break
-
     def forward(self, images):
         images = images.cuda(non_blocking=True)
         output = self.model(images)
@@ -252,8 +267,8 @@ class Trainer(object):
         target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
         output = self.forward(images)
         loss = self.loss_func(output, target)
-        self.cache['target'] = target
-        self.cache['output'] = output
+        for metric in self.metrics:
+            self.metrics[metric]['train'].update(output, target)
         # Optimize
         self.optimizer.zero_grad()
         loss.backward()
@@ -276,8 +291,8 @@ class Trainer(object):
         target = torch.from_numpy(np.array(targets)).float().cuda(non_blocking=True)
         output = self.forward(images)
         loss = self.loss_func(output, target)
-        self.cache['target'] = target
-        self.cache['output'] = output
+        for metric in self.metrics:
+            self.metrics[metric]['val'].update(output, target)
         # Log
         loss = loss.detach()
         logging.debug('[val {}/{}/{}] loss {}'.format(
@@ -301,7 +316,8 @@ class Trainer(object):
             'epoch': self.current_epoch,
             'lowest_train_loss': self.lowest_train_loss,
             'lowest_val_loss': self.lowest_val_loss,
-            'drawer_state': drawer_state
+            'drawer_state': drawer_state,
+            'cache': self.cache
         }
 
         torch.save(state, self.standard_model_path(name))
@@ -355,3 +371,21 @@ class Trainer(object):
             current_dir = os.path.join(current_dir, dir_name)
             if not os.path.isdir(current_dir):
                 os.mkdir(current_dir)
+
+# ===============
+class mean_aggregator():
+    def __init__(self, loss_func):
+        self.loss_func = loss_func
+        self.sum = 0
+        self.count = 0
+
+    def update(self, target, output):
+        self.sum += self.loss_func(target, output)
+        self.count += len(target)
+
+    def mean(self):
+        _mean = self.sum / (self.count + 10e-15)
+        if torch.is_tensor(_mean):
+            return _mean.item()
+        else:
+            return _mean

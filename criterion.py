@@ -52,26 +52,59 @@ def get_weight(label_count, weight, mu=0.5):
 
 
 # =========================
-def cal_f1_scores(cfs_mats):
-    f1_scores = []
-    for cfs_mat in cfs_mats:
-        (tn, fp, fn, tp) = cfs_mat
-        precision = tp / (tp + fp)
-        recall = tp / (tp + fn)
-        f1 = 2 * (precision * recall) / (precision + recall)
-        f1_scores.append(f1)
-    return f1_scores
-
-def update_macro_f1(output, target, cfs_mats, threshold, n_classes):
-    preds = output.sigmoid().cpu() > threshold
-    cfs_mats = [cfs_mats[i] + confusion_matrix(target[:, i], preds[:, i]).ravel()
-                for i in range(n_classes)]
-    f1_scores = cal_f1_scores(cfs_mats)
-    return cfs_mats, f1_scores
-
 def focal_loss(output, target, alpha=0.25, gamma=2):
     x, p, t = output, output.sigmoid(), target
     pt = p*t + (1-p)*(1-t)         # pt = p if t > 0 else 1-p
     w = alpha*t + (1-alpha)*(1-t)  # w = alpha if t > 0 else 1-alpha
     w = w * (1-pt).pow(gamma)
     return F.binary_cross_entropy_with_logits(x, t, w, size_average=False)
+
+
+# ==========================
+class mean_aggregator():
+    def __init__(self, loss_func):
+        self.loss_func = loss_func
+        self.sum = 0
+        self.count = 0
+
+    def update(self, output, target):
+        self.sum += self.loss_func(output, target)
+        self.count += targer.shape[0]
+
+    def mean(self):
+        _mean = self.sum / (self.count + 10e-15)
+        if torch.is_tensor(_mean):
+            return _mean.item()
+        else:
+            return _mean
+
+class f1_macro_aggregator():
+    def __init__(self, threshold, n_class):
+        self.cfs_mats = [np.zeros(4) for i in range(n_class)]
+        self.threshold = threshold
+        self.n_class = n_class
+        self.f1_scores = np.nan
+
+    def update(self, output, target):
+        self.cfs_mats, self.f1_scores = self.update_macro_f1(output, target, self.cfs_mats,
+                                                             self.threshold, self.n_class)
+
+    def mean(self):
+        return np.nanmean(self.f1_scores)
+
+    def update_macro_f1(self, output, target, cfs_mats, threshold, n_classes):
+        preds = output.sigmoid().cpu() > threshold
+        cfs_mats = [cfs_mats[i] + confusion_matrix(target[:, i], preds[:, i]).ravel()
+                    for i in range(n_classes)]
+        f1_scores = self.cal_f1_scores(cfs_mats)
+        return cfs_mats, f1_scores
+
+    def cal_f1_scores(self, cfs_mats):
+        f1_scores = []
+        for cfs_mat in cfs_mats:
+            (tn, fp, fn, tp) = cfs_mat
+            precision = tp / (tp + fp)
+            recall = tp / (tp + fn)
+            f1 = 2 * (precision * recall) / (precision + recall)
+            f1_scores.append(f1)
+        return f1_scores
