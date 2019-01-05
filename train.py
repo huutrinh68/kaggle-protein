@@ -5,7 +5,6 @@ import os
 import numpy as np
 import pandas as pd
 from skeleton.trainer import Trainer
-from sklearn.metrics import confusion_matrix
 from sacred import Experiment
 from sacred.observers import MongoObserver, FileStorageObserver
 from sacred.utils import apply_backspaces_and_linefeeds
@@ -13,7 +12,7 @@ from sacred.commands import print_config
 
 # local import
 from optimizer import optimizer_ingredient, load_optimizer
-from criterion import criterion_ingredient, load_loss, cal_f1_scores
+from criterion import criterion_ingredient, load_loss, update_macro_f1
 from model import model_ingredient, load_model
 from data import data_ingredient, create_loader
 from path import path_ingredient, prepair_dir
@@ -33,6 +32,7 @@ def cfg():
     threshold = 0.2
     resume = True
     debug = False
+    comment = ''
     if debug == True:
         max_epochs = 3
 
@@ -95,11 +95,13 @@ def main(_log, max_epochs, resume, model, optimizer, data, path, seed, debug, cr
             additional_metrics = {'macro_f1'}
         )
 
-        # trainer.train()
-        try:
+        if debug:
             trainer.train()
-        except Exception as e:
-            _log.error('Unexpected exception! %s', e)
+        else:
+            try:
+                trainer.train()
+            except Exception as e:
+                _log.error('Unexpected exception! %s', e)
 
 
 @ex.capture
@@ -114,7 +116,7 @@ def before_epoch_start(trainer, data):
 @ex.capture
 def after_train_iteration_end(trainer, data, threshold):
     cfs_mats, f1_scores = update_macro_f1(trainer.cache['output'], trainer.cache['target'],
-                                          trainer.cache['train_cfs_mats'], threshold, data.n_classes)
+                                          trainer.cache['train_cfs_mats'], threshold, data['n_classes'])
     trainer.cache['train_cfs_mats']  = cfs_mats
     trainer.cache['train_f1_scores'] = f1_scores
     trainer.cache['train_macro_f1']  = np.nanmean(f1_scores)
@@ -123,7 +125,7 @@ def after_train_iteration_end(trainer, data, threshold):
 @ex.capture
 def after_val_iteration_end(trainer, data, threshold):
     cfs_mats, f1_scores = update_macro_f1(trainer.cache['output'], trainer.cache['target'],
-                                          trainer.cache['val_cfs_mats'], threshold, data.n_classes)
+                                          trainer.cache['val_cfs_mats'], threshold, data['n_classes'])
     trainer.cache['val_cfs_mats']  = cfs_mats
     trainer.cache['val_f1_scores'] = f1_scores
     trainer.cache['val_macro_f1']  = np.nanmean(f1_scores)
@@ -142,11 +144,12 @@ def after_epoch_end(trainer, _run):
 
 
 @ex.capture
-def get_dir_name(model, optimizer, data, path, criterion, seed):
+def get_dir_name(model, optimizer, data, path, criterion, seed, comment):
     name = model['model']
     name += '_' + optimizer['optimizer'] + '_' + str(optimizer['lr'])
     name += '_' + criterion['loss'] + '_' + criterion['weight']
     name += '_' + str(seed)
+    name += '_' + str(comment)
     print('Experiment code:', name)
     return name
 

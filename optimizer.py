@@ -36,7 +36,7 @@ def load_sgd(params, lr, weight_decay, momentum):
 @optimizer_ingredient.capture
 def load_optimizer(params, optimizer):
     if optimizer == 'adam':  _optimizer = load_adam(params)
-    if optimizer == 'adamw': _optimizer = load_adamw(params)
+    elif optimizer == 'adamw': _optimizer = load_adamw(params)
     else:_optimizer = load_sgd(params)
     return _optimizer
 

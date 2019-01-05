@@ -17,9 +17,9 @@ def cfg():
 def load_model(model, data):
     n_classes  = data['n_classes']
     n_channels = data['n_channels']
-    if model == 'resnet34': return _get_net_resnet34(n_channels, n_classes)
-    if model == 'resnet18': return _get_net_resnet18(n_channels, n_classes)
-    if model == 'seres50' : return _get_net_seres50(n_channels, n_classes)
+    if   model == 'resnet34': return _get_net_resnet34(n_channels, n_classes)
+    elif model == 'resnet18': return _get_net_resnet18(n_channels, n_classes)
+    elif model == 'seres50' : return _get_net_seres50(n_channels, n_classes)
     else: return _get_net_bninception(n_channels, n_classes)
 
 

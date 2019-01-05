@@ -5,6 +5,7 @@ import numpy as np
 
 from torch import nn
 from collections import OrderedDict
+from sklearn.metrics import confusion_matrix
 import torch.nn.functional as F
 
 # sacred import
@@ -62,7 +63,7 @@ def cal_f1_scores(cfs_mats):
     return f1_scores
 
 def update_macro_f1(output, target, cfs_mats, threshold, n_classes):
-    preds = output.sigmoig().cpu() > threshold
+    preds = output.sigmoid().cpu() > threshold
     cfs_mats = [cfs_mats[i] + confusion_matrix(target[:, i], preds[:, i]).ravel()
                 for i in range(n_classes)]
     f1_scores = cal_f1_scores(cfs_mats)
