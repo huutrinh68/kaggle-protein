@@ -111,30 +111,21 @@ def before_epoch_start(trainer, data):
     trainer.cache['val_f1_scores']   = None
     trainer.cache['val_macro_f1']    = 0
 
-
 @ex.capture
 def after_train_iteration_end(trainer, data, threshold):
-    preds = trainer.cache['output'].sigmoid().cpu() > threshold
-    target = trainer.cache['target']
-    cfs_mats = trainer.cache['train_cfs_mats']
-    cfs_mats = [cfs_mats[i] + confusion_matrix(target[:, i], preds[:, i]).ravel()
-                        for i in range(data['n_classes'])]
-    f1_scores = cal_f1_scores(cfs_mats)
+    cfs_mats, f1_scores = update_macro_f1(trainer.cache['output'], trainer.cache['target'],
+                                          trainer.cache['train_cfs_mats'], threshold, data.n_classes)
     trainer.cache['train_cfs_mats']  = cfs_mats
-    trainer.cache['train_f1_scores'] = cal_f1_scores(cfs_mats)
+    trainer.cache['train_f1_scores'] = f1_scores
     trainer.cache['train_macro_f1']  = np.nanmean(f1_scores)
 
 
 @ex.capture
 def after_val_iteration_end(trainer, data, threshold):
-    preds = trainer.cache['output'].sigmoid().cpu() > threshold
-    target = trainer.cache['target']
-    cfs_mats = trainer.cache['val_cfs_mats']
-    cfs_mats = [cfs_mats[i] + confusion_matrix(target[:, i], preds[:, i]).ravel()
-                        for i in range(data['n_classes'])]
-    f1_scores = cal_f1_scores(cfs_mats)
+    cfs_mats, f1_scores = update_macro_f1(trainer.cache['output'], trainer.cache['target'],
+                                          trainer.cache['val_cfs_mats'], threshold, data.n_classes)
     trainer.cache['val_cfs_mats']  = cfs_mats
-    trainer.cache['val_f1_scores'] = cal_f1_scores(cfs_mats)
+    trainer.cache['val_f1_scores'] = f1_scores
     trainer.cache['val_macro_f1']  = np.nanmean(f1_scores)
 
 

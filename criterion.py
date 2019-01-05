@@ -14,7 +14,7 @@ criterion_ingredient = Ingredient('criterion')
 
 @criterion_ingredient.config
 def cfg():
-    loss   = 'logbce' #
+    loss   = 'logbce' # logbce / focal (default: logbce)
     weight = 'log'    # log / linear / none (default: log)
 
 
@@ -61,6 +61,12 @@ def cal_f1_scores(cfs_mats):
         f1_scores.append(f1)
     return f1_scores
 
+def update_macro_f1(output, target, cfs_mats, threshold, n_classes):
+    preds = output.sigmoig().cpu() > threshold
+    cfs_mats = [cfs_mats[i] + confusion_matrix(target[:, i], preds[:, i]).ravel()
+                for i in range(n_classes)]
+    f1_scores = cal_f1_scores(cfs_mats)
+    return cfs_mats, f1_scores
 
 def focal_loss(output, target, alpha=0.25, gamma=2):
     x, p, t = output, output.sigmoid(), target
