@@ -125,3 +125,4 @@ all_scalars.json
 nano.save
 test.py
 trained_model
+tmp
