@@ -15,6 +15,9 @@ def cfg():
     kaggle_csv        = 'input/train.csv'
     external_csv      = 'input/external_data/train.csv'
 
+@path_ingredient.named_config
+def old_data():
+    train_data = 'input/train_all_old/'
 
 @path_ingredient.capture
 def prepair_dir(root, exp_logs, submit):

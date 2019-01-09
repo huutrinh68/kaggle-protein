@@ -42,7 +42,7 @@ def cfg():
     upsampling = True
     aug_train  = ['noop', 'rot90', 'rot180', 'rot270', 'shear',
                   'flipud', 'fliplr']                             # train aug actions
-    aug_tta    = ['noop', 'flipup', 'fliplr', 'rot90', 'rot-90']  # tta aug actions
+    aug_tta    = ['noop', 'flipud', 'fliplr', 'rot90', 'rot-90']  # tta aug actions
 
 
 @data_ingredient.capture
@@ -51,6 +51,8 @@ def load_gen(data_df, mode, path):
         return CellDataset(data_df, path['root'] + path['train_data'], mode='train')
     if mode == 'test':
         return CellDataset(data_df, path['root'] + path['test_data'], mode='test')
+    if mode == 'test-val':
+        return CellDataset(data_df, path['root'] + path['train_data'], mode='test')
 
 
 @data_ingredient.capture
@@ -61,26 +63,16 @@ def load_loader(dataset, mode, batch_size, n_workers):
     if mode == 'val':
         return DataLoader(dataset, batch_size = batch_size, shuffle=False,
                           pin_memory=True, num_workers=n_workers)
-    if mode == 'test':
+    if mode in ['test', 'test-val']:
         return DataLoader(dataset, batch_size = 1, shuffle=False,
                           pin_memory=True, num_workers=n_workers)
 
-
 @data_ingredient.capture
 def create_loader(fold, n_fold, seed, debug, path, n_classes, upsampling):
-    # Load csv file
-    kaggle_df   = pd.read_csv(path['root'] + path['kaggle_csv'])
-    external_df = pd.read_csv(path['root'] + path['external_csv'])
-    all_files   = pd.concat([kaggle_df, external_df])
-    if debug: all_files = all_files[:1000]
+    train_data_df, val_data_df = get_train_val_df(fold, n_fold, seed, debug)
 
-    # Get the fold-th split
-    y = get_multihot(targets=all_files.Target, n_classes=n_classes)
-    mskf = MultilabelStratifiedKFold(n_splits=n_fold, shuffle=True, random_state=seed)
-    for _fold, (train_index, val_index) in enumerate(mskf.split(all_files, y)):
-        if _fold == fold: break # Get the fold-th split
-    train_data_df = all_files.iloc[train_index].reset_index()
-    val_data_df = all_files.iloc[val_index].reset_index()
+    # Up sampling
+    train_data_df = up_sampling(train_data_df, upsampling)
 
     # Create data loader
     train_gen = load_gen(data_df=train_data_df, mode='train')
@@ -91,6 +83,35 @@ def create_loader(fold, n_fold, seed, debug, path, n_classes, upsampling):
 
     return train_loader, val_loader, labels_count
 
+@data_ingredient.capture
+def create_test_loader(fold, n_fold, seed, debug, path):
+    _, val_data_df = get_train_val_df(fold, n_fold, seed, debug)
+    test_data_df = pd.read_csv(path['root'] + path['sample_submission'])
+    if debug: test_data_df = test_data_df[:100]
+    test_gen    = load_gen(data_df=test_data_df, mode='test')
+    test_loader = load_loader(test_gen, mode='test')
+    val_gen     = load_gen(data_df=val_data_df, mode='test-val')
+    val_loader  = load_loader(val_gen, mode='test-val')
+
+    return test_loader, val_loader
+
+@data_ingredient.capture
+def get_train_val_df(fold, n_fold, seed, debug, path, n_classes):
+    # Load csv file
+    kaggle_df   = pd.read_csv(path['root'] + path['kaggle_csv'])
+    external_df = pd.read_csv(path['root'] + path['external_csv'])
+    all_files   = pd.concat([kaggle_df, external_df])
+    if debug: all_files = all_files[:100]
+
+    # Get the fold-th split
+    y = get_multihot(targets=all_files.Target, n_classes=n_classes)
+    mskf = MultilabelStratifiedKFold(n_splits=n_fold, shuffle=True, random_state=seed)
+    for _fold, (train_index, val_index) in enumerate(mskf.split(all_files, y)):
+        if _fold == fold: break # Get the fold-th split
+    train_data_df = all_files.iloc[train_index].reset_index()
+    val_data_df = all_files.iloc[val_index].reset_index()
+
+    return train_data_df, val_data_df
 
 @data_ingredient.capture
 def up_sampling(train_data_df, upsampling):
@@ -160,13 +181,13 @@ class CellDataset(Dataset):
 
     def __getitem__(self,index):
         X = self.read_images(index)
-        if not self.mode == "test":
-            labels = np.array(list(map(int, self.images_df.iloc[index].Target.split(' '))))
-            y  = np.eye(self.n_classes,dtype=np.float)[labels].sum(axis=0)
+        if 'Predicted' in self.images_df:
+            labels = self.images_df.iloc[index].Predicted
         else:
-            y = str(self.images_df.iloc[index].Id.absolute()) # Dummy ?
+            labels = np.array(list(map(int, self.images_df.iloc[index].Target.split(' '))))
+        y  = np.eye(self.n_classes,dtype=np.float)[labels].sum(axis=0)
 
-        if self.mode == 'train' or self.tta == None:
+        if self.mode == 'train' or self.n_tta == None:
             if self.augment: X = self.train_augment(X)
             return self.preprocess(X) ,y
         else:
@@ -204,4 +225,4 @@ class CellDataset(Dataset):
     @data_ingredient.capture
     def tta_augment(self, image):
         augs = [iaa_dict[action] for action in self.aug_tta]
-        return [action.augment_image(image) for action in self.aug_tta[:self.n_tta]]
+        return [action.augment_image(image) for action in augs[:self.n_tta]]

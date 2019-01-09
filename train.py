@@ -4,7 +4,6 @@ import warnings
 import os
 import numpy as np
 import pandas as pd
-
 from skeleton.trainer import Trainer
 from sacred import Experiment
 from sacred.observers import MongoObserver, FileStorageObserver
@@ -18,11 +17,11 @@ from model import model_ingredient, load_model
 from data import data_ingredient, create_loader
 from path import path_ingredient, prepair_dir
 
-ex = Experiment('Sample', ingredients=[model_ingredient,      # model
-                                       optimizer_ingredient,  # optimizer
-                                       data_ingredient,       # data
-                                       path_ingredient,       # path
-                                       criterion_ingredient]) # criterion
+ex = Experiment('Train', ingredients=[model_ingredient,      # model
+                                      optimizer_ingredient,  # optimizer
+                                      data_ingredient,       # data
+                                      path_ingredient,       # path
+                                      criterion_ingredient]) # criterion
 ex.observers.append(MongoObserver.create(db_name='human_protein'))
 ex.observers.append(FileStorageObserver.create('exp_logs/experiments'))
 ex.captured_out_filter = apply_backspaces_and_linefeeds
@@ -34,6 +33,7 @@ def cfg():
     resume = True
     debug = False
     comment = ''
+    seed=2050
     if debug == True:
         max_epochs = 3
 
