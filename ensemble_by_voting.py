@@ -68,12 +68,44 @@ by huutrinh
 add submission details
 0.541
 
+submit_9:
+seresnet50_bcelog_bestloss_bestf1_submission.csv
+by huutrinh
+old data, 1 fold
+0.562
+
+submit_10:
+seresnet50_bcelog_bestloss_submission.csv
+by huutrinh
+5fold 15 epochs, 5tta, fillna [old data]
+0.586
+
 '''
 
  
 
-files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_2.csv', './tmp/submit_3.csv', './tmp/submit_4.csv', './tmp/submit_5.csv', \
-        './tmp/submit_6.csv', './tmp/submit_7.csv', './tmp/submit_8.csv']
+# files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_2.csv', './tmp/submit_3.csv', './tmp/submit_4.csv', './tmp/submit_5.csv', \
+#         './tmp/submit_6.csv', './tmp/submit_7.csv', './tmp/submit_8.csv'] #0.585 thres=4, 0.576 thres=5
+
+# files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_2.csv', './tmp/submit_3.csv', './tmp/submit_4.csv', './tmp/submit_5.csv', \
+#         './tmp/submit_6.csv', './tmp/submit_7.csv', './tmp/submit_9.csv'] #0.581 thres=4, 0.584 thres=5
+
+# files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_2.csv', './tmp/submit_3.csv', './tmp/submit_5.csv', \
+#         './tmp/submit_6.csv', './tmp/submit_9.csv'] #0.578 thres=3, 0.582 thres=4
+
+# files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_2.csv', './tmp/submit_3.csv', './tmp/submit_10.csv', './tmp/submit_5.csv', \
+#          './tmp/submit_9.csv'] #0.583 thres=4, 0.582 thres=3
+
+# files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_10.csv'] #thres2: 0.578
+
+# files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_2.csv', './tmp/submit_3.csv', './tmp/submit_10.csv', './tmp/submit_5.csv', \
+#         './tmp/submit_6.csv', './tmp/submit_7.csv', './tmp/submit_9.csv'] #0.586 thres4, 0.588 thres5
+
+# files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_2.csv', './tmp/submit_3.csv', './tmp/submit_10.csv', './tmp/submit_5.csv', \
+#         './tmp/submit_10.csv', './tmp/submit_7.csv', './tmp/submit_9.csv'] #0.589 thres4, 0.584 thres 5
+
+files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_2.csv', './tmp/submit_3.csv', './tmp/submit_10.csv', './tmp/submit_5.csv', \
+        './tmp/submit_10.csv', './tmp/submit_10.csv', './tmp/submit_9.csv'] #0.589 thres4
 submit_dfs = [pd.read_csv(f) for f in files]
 final_df = submit_dfs[0] # dummy
 
