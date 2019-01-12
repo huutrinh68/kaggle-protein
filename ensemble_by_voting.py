@@ -79,10 +79,7 @@ seresnet50_bcelog_bestloss_submission.csv
 by huutrinh
 5fold 15 epochs, 5tta, fillna [old data]
 0.586
-
 '''
-
- 
 
 # files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_2.csv', './tmp/submit_3.csv', './tmp/submit_4.csv', './tmp/submit_5.csv', \
 #         './tmp/submit_6.csv', './tmp/submit_7.csv', './tmp/submit_8.csv'] #0.585 thres=4, 0.576 thres=5
@@ -106,6 +103,7 @@ by huutrinh
 
 files = ['./tmp/submit_0.csv', './tmp/submit_1.csv', './tmp/submit_2.csv', './tmp/submit_3.csv', './tmp/submit_10.csv', './tmp/submit_5.csv', \
         './tmp/submit_10.csv', './tmp/submit_10.csv', './tmp/submit_9.csv'] #0.589 thres4
+
 submit_dfs = [pd.read_csv(f) for f in files]
 final_df = submit_dfs[0] # dummy
 
