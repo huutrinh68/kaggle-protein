@@ -1,5 +1,5 @@
-import pretrainedmodels
 from torchvision import models
+from pretrainedmodels.models import bninception
 from torch import nn
 
 # local import
@@ -26,7 +26,7 @@ def load_model(model, data):
 # =======================
 # get_net functions
 def _get_net_bninception(n_channels, n_classes):
-    _model = pretrainedmodels.bninception(pretrained="imagenet")
+    _model = bninception(pretrained="imagenet")
     new_features = nn.Sequential(*list(_model.children()))
     new_features[0] = nn.Conv2d(n_channels, 64, kernel_size=(7, 7),
                                 stride=(2, 2), padding=(3, 3))
